@@ -16,38 +16,38 @@ type Props = {
 
 export function HeaderBar({name, filters, onChange}: Props) {
   return (
-    <header className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-4 p-4 md:p-5">
-      <h1 className="pointer-events-auto text-[22px] font-normal tracking-tight text-black">
+    <header className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-black/10 bg-white px-4 md:h-14 md:px-5">
+      <h1 className="min-w-0 truncate text-[18px] font-normal tracking-tight text-black md:text-[20px]">
         {name}
       </h1>
-      <div className="pointer-events-auto flex items-center gap-1 rounded-full bg-white/90 px-1 py-1 shadow-sm ring-1 ring-black/10">
-        <FilterChip
+      <nav aria-label="Layers" className="flex shrink-0 items-center">
+        <FilterLink
           label="Photos"
           active={filters.photos}
           onClick={() => onChange({...filters, photos: !filters.photos})}
         >
           <PhotoShape className="h-3.5 w-3.5" />
-        </FilterChip>
-        <FilterChip
+        </FilterLink>
+        <FilterLink
           label="Tracks"
           active={filters.tracks}
           onClick={() => onChange({...filters, tracks: !filters.tracks})}
         >
           <TrackShape className="h-3.5 w-3.5" />
-        </FilterChip>
-        <FilterChip
+        </FilterLink>
+        <FilterLink
           label="Pins"
           active={filters.pins}
           onClick={() => onChange({...filters, pins: !filters.pins})}
         >
           <CatchShape className="h-3.5 w-3.5" />
-        </FilterChip>
-      </div>
+        </FilterLink>
+      </nav>
     </header>
   )
 }
 
-function FilterChip({
+function FilterLink({
   label,
   active,
   onClick,
@@ -63,8 +63,8 @@ function FilterChip({
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] ${
-        active ? 'bg-black text-white' : 'bg-transparent text-black/50'
+      className={`flex items-center gap-1.5 px-2.5 py-2 text-[13px] md:px-3 ${
+        active ? 'text-black' : 'text-black/35 hover:text-black/70'
       }`}
     >
       {children}

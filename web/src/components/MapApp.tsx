@@ -42,32 +42,34 @@ export function MapApp({data}: Props) {
   const card = selectedStillVisible ? selected : null
 
   return (
-    <div className="relative h-dvh w-full overflow-hidden bg-[#e8e8e8]">
+    <div className="flex h-dvh w-full flex-col overflow-hidden bg-white">
       <HeaderBar name={data.name} filters={filters} onChange={setFilters} />
-      {mapFailed ? (
-        <div className="flex h-full items-center justify-center text-[14px] text-black/70">
-          Couldn’t load the map.
-        </div>
-      ) : (
-        <MapCanvas
-          data={data}
-          filters={filters}
-          selected={card}
-          onSelect={setSelected}
-          onMapError={() => setMapFailed(true)}
-        />
-      )}
-      {!mapFailed && total === 0 ? (
-        <p className="pointer-events-none absolute left-4 top-16 z-10 text-[14px] text-black/55 md:top-[4.5rem]">
-          Nothing mapped yet.
-        </p>
-      ) : null}
-      {!mapFailed && total > 0 && visibleCount === 0 ? (
-        <p className="pointer-events-none absolute left-4 top-16 z-10 text-[14px] text-black/55 md:top-[4.5rem]">
-          Nothing mapped yet.
-        </p>
-      ) : null}
-      {card ? <InfoCard data={data} selected={card} onClose={() => setSelected(null)} /> : null}
+      <div className="relative min-h-0 flex-1 bg-[#e8e8e8]">
+        {mapFailed ? (
+          <div className="flex h-full items-center justify-center text-[14px] text-black/70">
+            Couldn’t load the map.
+          </div>
+        ) : (
+          <MapCanvas
+            data={data}
+            filters={filters}
+            selected={card}
+            onSelect={setSelected}
+            onMapError={() => setMapFailed(true)}
+          />
+        )}
+        {!mapFailed && total === 0 ? (
+          <p className="pointer-events-none absolute left-4 top-4 z-10 text-[14px] text-black/55">
+            Nothing mapped yet.
+          </p>
+        ) : null}
+        {!mapFailed && total > 0 && visibleCount === 0 ? (
+          <p className="pointer-events-none absolute left-4 top-4 z-10 text-[14px] text-black/55">
+            Nothing mapped yet.
+          </p>
+        ) : null}
+        {card ? <InfoCard data={data} selected={card} onClose={() => setSelected(null)} /> : null}
+      </div>
     </div>
   )
 }
