@@ -1,5 +1,0 @@
-{
-  "buildCommand": "npx sanity build",
-  "outputDirectory": "dist",
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
-}

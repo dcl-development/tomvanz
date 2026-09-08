@@ -9,6 +9,7 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  transpilePackages: ['sanity', 'next-sanity'],
 }
 
 export default nextConfig

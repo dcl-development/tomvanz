@@ -1,3 +1,5 @@
+'use client'
+
 import {useCallback, useEffect, useRef} from 'react'
 import {Box, Stack, Text} from '@sanity/ui'
 import {LngLat, Map as MapLibreMap, Marker, type MapMouseEvent} from 'maplibre-gl'
@@ -18,7 +20,10 @@ export function MapGeopointInput(props: ObjectInputProps) {
   const mapRef = useRef<MapLibreMap | null>(null)
   const markerRef = useRef<Marker | null>(null)
   const onChangeRef = useRef(onChange)
-  onChangeRef.current = onChange
+
+  useEffect(() => {
+    onChangeRef.current = onChange
+  }, [onChange])
 
   const geopoint = value as Geopoint | undefined
   const lat = geopoint?.lat

@@ -1,3 +1,5 @@
+'use client'
+
 import {useEffect, useRef, useState} from 'react'
 import {Button, Card, Flex, Stack, Text} from '@sanity/ui'
 import exifr from 'exifr'
