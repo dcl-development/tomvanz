@@ -4,6 +4,7 @@ import {useCallback, useEffect, useRef} from 'react'
 import {Box, Stack, Text} from '@sanity/ui'
 import {LngLat, Map as MapLibreMap, Marker, type MapMouseEvent} from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
+import '@/lib/maplibre-worker'
 import {PatchEvent, set, type ObjectInputProps} from 'sanity'
 
 type Geopoint = {

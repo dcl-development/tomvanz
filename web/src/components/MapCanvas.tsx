@@ -3,6 +3,7 @@
 import {useEffect, useRef} from 'react'
 import {LngLatBounds, Map as MapLibreMap, Marker, NavigationControl} from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
+import '@/lib/maplibre-worker'
 import {urlFor} from '@/lib/sanity/image'
 import {trackColor} from '@/lib/track-color'
 import type {LayerFilters} from './HeaderBar'
