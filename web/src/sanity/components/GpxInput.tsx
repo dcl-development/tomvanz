@@ -20,7 +20,7 @@ export function GpxInput(props: ObjectInputProps) {
   const [error, setError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const hasFile = Boolean(fileValue?.asset?._ref)
-  const hasRoute = lineCoordinates({type: 'LineString', coordinates: route?.coordinates ?? []}).length >= 2
+  const hasRoute = lineCoordinates(route).length >= 2
 
   async function onFile(file: File) {
     setError(null)

@@ -25,7 +25,7 @@ export type TrackDoc = {
   }
 }
 
-export function lineCoordinates(route: TrackDoc['route'] | undefined): [number, number][] {
+export function lineCoordinates(route: {coordinates?: unknown} | undefined): [number, number][] {
   const raw = parseCoordinateList(route?.coordinates)
   const coords: [number, number][] = []
   for (const point of raw) {
