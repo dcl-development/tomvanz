@@ -5,7 +5,7 @@ Tom’s map. He adds catch photos, GPX tracks, and pins in Studio. You ship the 
 ## Apps
 
 - `web/` — Next.js map on Vercel (`https://tomvanz.vercel.app`)
-- `studio/` — Sanity Studio on Vercel (`tomvanz-studio` project)
+- `studio/` — Sanity Studio on Vercel (`https://tomvanz-studio-git-lurk-map-site-df51-jakedcl.vercel.app` until merge)
 
 ## Local
 
