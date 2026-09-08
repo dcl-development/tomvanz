@@ -1,4 +1,4 @@
-import {defineArrayMember, defineField, defineType} from 'sanity'
+import {defineField, defineType} from 'sanity'
 import {GpxInput} from '../components/GpxInput'
 
 export const track = defineType({
@@ -48,8 +48,7 @@ export const track = defineType({
         }),
         defineField({
           name: 'coordinates',
-          type: 'array',
-          of: [defineArrayMember({type: 'geopoint'})],
+          type: 'text',
         }),
       ],
     }),

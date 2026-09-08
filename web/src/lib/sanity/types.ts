@@ -21,29 +21,44 @@ export type TrackDoc = {
   startedAt?: string
   route: {
     type: 'LineString'
-    coordinates: Array<Geopoint | [number, number]>
+    coordinates: string | Array<Geopoint | [number, number]>
   }
 }
 
 export function lineCoordinates(route: TrackDoc['route'] | undefined): [number, number][] {
-  const points = route?.coordinates
-  if (!Array.isArray(points)) return []
-
+  const raw = parseCoordinateList(route?.coordinates)
   const coords: [number, number][] = []
-  for (const point of points) {
-    if (Array.isArray(point) && point.length >= 2) {
-      const lng = Number(point[0])
-      const lat = Number(point[1])
-      if (Number.isFinite(lng) && Number.isFinite(lat)) coords.push([lng, lat])
-      continue
-    }
-    if (!Array.isArray(point)) {
-      const lng = Number(point.lng)
-      const lat = Number(point.lat)
-      if (Number.isFinite(lng) && Number.isFinite(lat)) coords.push([lng, lat])
-    }
+  for (const point of raw) {
+    const pair = toLngLat(point)
+    if (pair) coords.push(pair)
   }
   return coords
+}
+
+function parseCoordinateList(value: unknown): unknown[] {
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value) as unknown
+      return Array.isArray(parsed) ? parsed : []
+    } catch {
+      return []
+    }
+  }
+  return Array.isArray(value) ? value : []
+}
+
+function toLngLat(point: unknown): [number, number] | null {
+  if (Array.isArray(point) && point.length >= 2) {
+    const lng = Number(point[0])
+    const lat = Number(point[1])
+    return Number.isFinite(lng) && Number.isFinite(lat) ? [lng, lat] : null
+  }
+  if (point && typeof point === 'object' && 'lng' in point && 'lat' in point) {
+    const lng = Number((point as Geopoint).lng)
+    const lat = Number((point as Geopoint).lat)
+    return Number.isFinite(lng) && Number.isFinite(lat) ? [lng, lat] : null
+  }
+  return null
 }
 
 export type PinKind = 'catch' | 'mountain' | 'park' | 'place'

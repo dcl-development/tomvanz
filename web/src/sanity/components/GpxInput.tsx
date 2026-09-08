@@ -3,6 +3,7 @@
 import {useRef, useState} from 'react'
 import {Button, Card, Flex, Stack, Text} from '@sanity/ui'
 import {PatchEvent, set, unset, useClient, useFormValue, type ObjectInputProps} from 'sanity'
+import {lineCoordinates} from '../../lib/sanity/types'
 import {parseGpxToLine} from '../lib/parseGpx'
 
 type FileValue = {
@@ -10,16 +11,16 @@ type FileValue = {
 }
 
 export function GpxInput(props: ObjectInputProps) {
-  const {value, readOnly, renderDefault} = props
+  const {value, readOnly} = props
   const fileValue = value as FileValue | undefined
   const client = useClient({apiVersion: '2026-01-01'})
   const documentId = useFormValue(['_id']) as string | undefined
-  const route = useFormValue(['route']) as {coordinates?: unknown[]} | undefined
+  const route = useFormValue(['route']) as {coordinates?: unknown} | undefined
   const [message, setMessage] = useState<'idle' | 'ok' | 'error'>('idle')
   const [error, setError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const hasFile = Boolean(fileValue?.asset?._ref)
-  const hasRoute = Array.isArray(route?.coordinates) && route.coordinates.length >= 2
+  const hasRoute = lineCoordinates({type: 'LineString', coordinates: route?.coordinates ?? []}).length >= 2
 
   async function onFile(file: File) {
     setError(null)
@@ -40,13 +41,9 @@ export function GpxInput(props: ObjectInputProps) {
         await client.patch(draftId).set({
           route: {
             type: 'LineString',
-            coordinates: line.coordinates.map(([lng, lat]) => ({
-              _type: 'geopoint',
-              lng,
-              lat,
-            })),
+            coordinates: JSON.stringify(line.coordinates),
           },
-        }).commit({autoGenerateArrayKeys: true})
+        }).commit()
       }
       setMessage('ok')
     } catch (caught) {
@@ -57,7 +54,6 @@ export function GpxInput(props: ObjectInputProps) {
 
   return (
     <Stack gap={3}>
-      {renderDefault(props)}
       <input
         ref={fileInputRef}
         type="file"
@@ -70,7 +66,7 @@ export function GpxInput(props: ObjectInputProps) {
           event.target.value = ''
         }}
       />
-      <Flex gap={2}>
+      <Flex gap={2} align="center">
         <Button
           text={hasFile ? 'Replace GPX' : 'Upload GPX'}
           mode="ghost"
@@ -93,10 +89,19 @@ export function GpxInput(props: ObjectInputProps) {
             }}
           />
         ) : null}
+        {hasFile ? (
+          <Text size={1} muted>
+            GPX attached
+          </Text>
+        ) : null}
       </Flex>
       {message === 'ok' || hasRoute ? (
         <Card padding={3} radius={2} tone="positive">
           <Text size={1}>Got the route. Publish to put it on the map.</Text>
+        </Card>
+      ) : hasFile ? (
+        <Card padding={3} radius={2} tone="caution">
+          <Text size={1}>File is attached, but the line isn’t parsed. Click Replace GPX and pick the file again.</Text>
         </Card>
       ) : null}
       {message === 'error' ? (
