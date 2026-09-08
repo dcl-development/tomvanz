@@ -2,6 +2,9 @@
 
 One Next.js app. The map is `/`. Tom edits at `/studio`.
 
+- Map: https://tomvanz.com
+- Studio: https://tomvanz.com/studio
+
 ## Local
 
 ```bash
