@@ -4,8 +4,8 @@ Tom’s map. He adds catch photos, GPX tracks, and pins in Studio. You ship the 
 
 ## Apps
 
-- `web/` — Next.js map on Vercel
-- `studio/` — Sanity Studio, hosted at [tomvanz.sanity.studio](https://tomvanz.sanity.studio)
+- `web/` — Next.js map on Vercel (`https://tomvanz.vercel.app`)
+- `studio/` — Sanity Studio on Vercel (`tomvanz-studio` project)
 
 ## Local
 
