@@ -37,7 +37,7 @@ export function lineCoordinates(route: TrackDoc['route'] | undefined): [number, 
       if (Number.isFinite(lng) && Number.isFinite(lat)) coords.push([lng, lat])
       continue
     }
-    if (point && typeof point === 'object') {
+    if (!Array.isArray(point)) {
       const lng = Number(point.lng)
       const lat = Number(point.lat)
       if (Number.isFinite(lng) && Number.isFinite(lat)) coords.push([lng, lat])
