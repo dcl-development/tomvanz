@@ -28,6 +28,13 @@ export const track = defineType({
       validation: (Rule) => Rule.required(),
     }),
     defineField({
+      name: 'photo',
+      title: 'Photo',
+      type: 'image',
+      description: 'Optional cover for the map card.',
+      options: {hotspot: true},
+    }),
+    defineField({
       name: 'file',
       title: 'GPX',
       type: 'file',
@@ -62,11 +69,13 @@ export const track = defineType({
     select: {
       title: 'title',
       activity: 'activity',
+      media: 'photo',
     },
-    prepare({title, activity}) {
+    prepare({title, activity, media}) {
       return {
         title: title || 'Track',
         subtitle: activity,
+        media,
       }
     },
   },

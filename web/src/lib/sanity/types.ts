@@ -23,6 +23,9 @@ export type TrackDoc = {
     type: 'LineString'
     coordinates: string | Array<Geopoint | [number, number]>
   }
+  photo?: {
+    asset?: {_ref: string}
+  }
 }
 
 export function lineCoordinates(route: {coordinates?: unknown} | undefined): [number, number][] {

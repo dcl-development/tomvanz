@@ -1,13 +1,28 @@
 'use client'
 
 import {PinShape} from './shapes'
+import {formatMiles, lineMiles} from '@/lib/geo'
 import {urlFor} from '@/lib/sanity/image'
-import type {MapData, PinKind, SelectedItem} from '@/lib/sanity/types'
+import {lineCoordinates, type MapData, type PinKind, type SelectedItem} from '@/lib/sanity/types'
+import {trackColor} from '@/lib/track-color'
 
 type Props = {
   data: MapData
   selected: SelectedItem
   onClose: () => void
+  placement: 'sheet' | 'popup'
+}
+
+type CardModel = {
+  title: string
+  eyebrow: string
+  stats: string[]
+  body: string | null
+  imageUrl: string | null
+  imageAlt: string
+  accent: string
+  kind: PinKind | null
+  dashed: boolean
 }
 
 function formatDate(value?: string) {
@@ -30,62 +45,141 @@ function activityLabel(activity: string) {
   return 'Track'
 }
 
-export function InfoCard({data, selected, onClose}: Props) {
-  let title = ''
-  let meta: string | null = null
-  let body: string | null = null
-  let imageUrl: string | null = null
-  let kind: PinKind | null = null
-
+function cardModel(data: MapData, selected: SelectedItem): CardModel | null {
   if (selected.kind === 'photo') {
     const photo = data.photos.find((item) => item._id === selected.id)
     if (!photo) return null
-    title = photo.fish
-    meta = formatDate(photo.takenAt)
-    body = photo.caption ?? null
-    imageUrl = photo.image ? urlFor(photo.image).width(800).height(800).fit('max').url() : null
+    const when = formatDate(photo.takenAt)
+    return {
+      title: photo.fish,
+      eyebrow: 'Catch',
+      stats: when ? [when] : [],
+      body: photo.caption ?? null,
+      imageUrl: photo.image?.asset
+        ? urlFor(photo.image).width(900).height(560).fit('crop').url()
+        : null,
+      imageAlt: photo.fish,
+      accent: '#111',
+      kind: 'catch',
+      dashed: false,
+    }
   }
 
   if (selected.kind === 'track') {
     const track = data.tracks.find((item) => item._id === selected.id)
     if (!track) return null
-    title = track.title
     const when = formatDate(track.startedAt)
-    meta = when ? `${activityLabel(track.activity)} · ${when}` : activityLabel(track.activity)
+    const miles = lineMiles(lineCoordinates(track.route))
+    const stats = [when, miles ? formatMiles(miles) : null].filter((item): item is string =>
+      Boolean(item),
+    )
+    return {
+      title: track.title,
+      eyebrow: activityLabel(track.activity),
+      stats,
+      body: null,
+      imageUrl: track.photo?.asset
+        ? urlFor(track.photo).width(900).height(560).fit('crop').url()
+        : null,
+      imageAlt: track.title,
+      accent: trackColor(track._id, data.tracks.map((item) => item._id)),
+      kind: null,
+      dashed: track.activity === 'hike',
+    }
   }
 
-  if (selected.kind === 'pin') {
-    const pin = data.pins.find((item) => item._id === selected.id)
-    if (!pin) return null
-    title = pin.title
-    kind = pin.kind
-    const when = formatDate(pin.at)
-    meta = when ? `${kindLabel(pin.kind)} · ${when}` : kindLabel(pin.kind)
-    body = pin.note ?? null
-    imageUrl = pin.photo ? urlFor(pin.photo).width(800).height(800).fit('max').url() : null
+  const pin = data.pins.find((item) => item._id === selected.id)
+  if (!pin) return null
+  const when = formatDate(pin.at)
+  return {
+    title: pin.title,
+    eyebrow: kindLabel(pin.kind),
+    stats: when ? [when] : [],
+    body: pin.note ?? null,
+    imageUrl: pin.photo?.asset
+      ? urlFor(pin.photo).width(900).height(560).fit('crop').url()
+      : null,
+    imageAlt: pin.title,
+    accent: '#111',
+    kind: pin.kind,
+    dashed: false,
   }
+}
+
+export function InfoCard({data, selected, onClose, placement}: Props) {
+  const card = cardModel(data, selected)
+  if (!card) return null
+
+  const frame =
+    placement === 'sheet'
+      ? 'tv-card absolute inset-x-0 bottom-0 z-20 max-h-[58vh] overflow-auto rounded-t-2xl bg-white shadow-[0_-8px_32px_rgba(0,0,0,0.18)]'
+      : 'tv-card w-[300px] overflow-hidden rounded-2xl bg-white shadow-[0_12px_40px_rgba(0,0,0,0.22)]'
 
   return (
-    <aside className="absolute inset-x-3 bottom-3 z-20 max-h-[70vh] overflow-auto rounded-lg bg-white p-4 shadow-lg ring-1 ring-black/10 md:inset-x-auto md:top-14 md:right-4 md:bottom-auto md:w-[320px]">
-      <div className="mb-3 flex items-start justify-between gap-3">
-        <div className="flex items-center gap-2">
-          {kind ? <PinShape kind={kind} className="h-4 w-4 text-black" /> : null}
-          <h2 className="text-[17px] leading-tight">{title}</h2>
+    <article className={frame}>
+      {placement === 'sheet' ? (
+        <div className="flex justify-center bg-white pt-2">
+          <div className="h-1 w-10 rounded-full bg-black/15" />
         </div>
+      ) : null}
+
+      <div className="relative aspect-[16/10] overflow-hidden bg-neutral-200">
+        {card.imageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={card.imageUrl} alt={card.imageAlt} className="h-full w-full object-cover" />
+        ) : (
+          <div
+            className="absolute inset-0"
+            style={{background: `linear-gradient(160deg, ${card.accent} 0%, #1a1a1a 78%)`}}
+          >
+            <svg
+              viewBox="0 0 300 188"
+              className="absolute inset-0 h-full w-full opacity-40"
+              aria-hidden
+            >
+              <path
+                d="M18 140 C70 40, 120 150, 170 70 S250 40, 286 110"
+                fill="none"
+                stroke="white"
+                strokeWidth="6"
+                strokeLinecap="round"
+                strokeDasharray={card.dashed ? '14 12' : undefined}
+              />
+            </svg>
+            {card.kind ? (
+              <PinShape kind={card.kind} className="absolute bottom-3 left-3 h-7 w-7 text-white" />
+            ) : null}
+          </div>
+        )}
         <button
           type="button"
           onClick={onClose}
-          className="text-[13px] text-black/50 hover:text-black"
+          aria-label="Close"
+          className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-white text-[18px] leading-none text-black shadow-sm"
         >
-          Close
+          ×
         </button>
       </div>
-      {imageUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={imageUrl} alt="" className="mb-3 max-h-64 w-full rounded object-cover" />
-      ) : null}
-      {meta ? <p className="text-[13px] text-black/55">{meta}</p> : null}
-      {body ? <p className="mt-2 text-[14px] leading-snug text-black/80">{body}</p> : null}
-    </aside>
+
+      <div className="px-4 pb-4 pt-3">
+        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-black/40">{card.eyebrow}</p>
+        <h2 className="mt-1 text-[22px] font-bold leading-tight tracking-tight">{card.title}</h2>
+        {card.stats.length > 0 ? (
+          <div className="mt-2.5 flex flex-wrap gap-1.5">
+            {card.stats.map((stat) => (
+              <span
+                key={stat}
+                className="rounded-full bg-black/[0.06] px-2.5 py-1 text-[12px] text-black/70"
+              >
+                {stat}
+              </span>
+            ))}
+          </div>
+        ) : null}
+        {card.body ? (
+          <p className="mt-3 text-[14px] leading-snug text-black/70">{card.body}</p>
+        ) : null}
+      </div>
+    </article>
   )
 }

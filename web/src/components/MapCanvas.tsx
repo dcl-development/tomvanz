@@ -1,11 +1,13 @@
 'use client'
 
-import {useEffect, useRef} from 'react'
-import {LngLatBounds, Map as MapLibreMap, Marker, NavigationControl} from 'maplibre-gl'
+import {useEffect, useRef, useState} from 'react'
+import {createRoot, type Root} from 'react-dom/client'
+import {LngLatBounds, Map as MapLibreMap, Marker, NavigationControl, Popup} from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import '@/lib/maplibre-worker'
+import {InfoCard} from './InfoCard'
 import {urlFor} from '@/lib/sanity/image'
-import {trackColor} from '@/lib/track-color'
+import {trackColors} from '@/lib/track-color'
 import type {LayerFilters} from './MapLayers'
 import {lineCoordinates, type MapData, PinKind, SelectedItem} from '@/lib/sanity/types'
 
@@ -15,7 +17,7 @@ type Props = {
   data: MapData
   filters: LayerFilters
   selected: SelectedItem | null
-  onSelect: (item: SelectedItem) => void
+  onSelect: (item: SelectedItem | null) => void
   onMapError: () => void
 }
 
@@ -33,6 +35,20 @@ function pinSvg(kind: PinKind) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 16 16"><rect x="3.5" y="3.5" width="9" height="9" fill="#111" ${halo}/></svg>`
 }
 
+function selectionPoint(data: MapData, selected: SelectedItem): [number, number] | null {
+  if (selected.kind === 'photo') {
+    const photo = data.photos.find((item) => item._id === selected.id)
+    return photo ? [photo.location.lng, photo.location.lat] : null
+  }
+  if (selected.kind === 'pin') {
+    const pin = data.pins.find((item) => item._id === selected.id)
+    return pin ? [pin.location.lng, pin.location.lat] : null
+  }
+  const track = data.tracks.find((item) => item._id === selected.id)
+  if (!track) return null
+  return lineCoordinates(track.route)[0] ?? null
+}
+
 export function MapCanvas({data, filters, selected, onSelect, onMapError}: Props) {
   const rootRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<MapLibreMap | null>(null)
@@ -41,6 +57,7 @@ export function MapCanvas({data, filters, selected, onSelect, onMapError}: Props
   const onMapErrorRef = useRef(onMapError)
   const dataRef = useRef(data)
   const filtersRef = useRef(filters)
+  const [popupMode, setPopupMode] = useState(() => window.matchMedia('(min-width: 768px)').matches)
 
   useEffect(() => {
     onSelectRef.current = onSelect
@@ -48,6 +65,13 @@ export function MapCanvas({data, filters, selected, onSelect, onMapError}: Props
     dataRef.current = data
     filtersRef.current = filters
   }, [onSelect, onMapError, data, filters])
+
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 768px)')
+    const update = () => setPopupMode(mq.matches)
+    mq.addEventListener('change', update)
+    return () => mq.removeEventListener('change', update)
+  }, [])
 
   useEffect(() => {
     const node = rootRef.current
@@ -70,6 +94,7 @@ export function MapCanvas({data, filters, selected, onSelect, onMapError}: Props
     mapRef.current = map
     map.addControl(new NavigationControl({showCompass: false}), 'bottom-right')
     map.on('error', () => onMapErrorRef.current())
+    map.on('click', () => onSelectRef.current(null))
     map.on('load', () => {
       syncMap(map, dataRef.current, filtersRef.current, onSelectRef.current, markersRef)
     })
@@ -90,16 +115,88 @@ export function MapCanvas({data, filters, selected, onSelect, onMapError}: Props
 
   useEffect(() => {
     markersRef.current.forEach((marker) => {
-      const id = marker.getElement().dataset.id
-      const kind = marker.getElement().dataset.kind
-      const isOn =
-        selected && id === selected.id && kind === selected.kind
-      marker.getElement().style.transform = isOn
-        ? `${marker.getElement().style.transform}`
-        : marker.getElement().style.transform
-      marker.getElement().dataset.active = isOn ? 'true' : 'false'
+      const el = marker.getElement()
+      const isOn = Boolean(selected && el.dataset.id === selected.id && el.dataset.kind === selected.kind)
+      el.dataset.active = isOn ? 'true' : 'false'
     })
-  }, [selected])
+  }, [selected, data, filters])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map?.loaded()) return
+    const style = map.getStyle()
+    for (const layer of style?.layers ?? []) {
+      if (!layer.id.startsWith('track-line-')) continue
+      const id = layer.id.slice('track-line-'.length)
+      const on = selected?.kind === 'track' && selected.id === id
+      map.setPaintProperty(layer.id, 'line-width', on ? 4.5 : 2.5)
+    }
+  }, [selected, data, filters])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map?.loaded() || !selected) return
+    const point = selectionPoint(data, selected)
+    if (!point) return
+
+    if (selected.kind === 'track') {
+      const track = data.tracks.find((item) => item._id === selected.id)
+      const coords = track ? lineCoordinates(track.route) : []
+      if (coords.length >= 2) {
+        const bounds = new LngLatBounds()
+        for (const coord of coords) bounds.extend(coord)
+        map.fitBounds(bounds, {
+          padding: {top: 88, bottom: popupMode ? 96 : 300, left: 48, right: 48},
+          maxZoom: 13,
+          duration: 700,
+        })
+        return
+      }
+    }
+
+    map.easeTo({
+      center: point,
+      offset: [0, popupMode ? 110 : -40],
+      zoom: Math.max(map.getZoom(), 11),
+      duration: 500,
+    })
+  }, [selected?.id, selected?.kind, popupMode, data])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !popupMode || !selected) return
+    const lngLat = selectionPoint(data, selected)
+    if (!lngLat) return
+
+    const node = document.createElement('div')
+    const root: Root = createRoot(node)
+    root.render(
+      <InfoCard
+        data={data}
+        selected={selected}
+        onClose={() => onSelectRef.current(null)}
+        placement="popup"
+      />,
+    )
+
+    const popup = new Popup({
+      closeButton: false,
+      closeOnClick: false,
+      offset: 18,
+      maxWidth: '320px',
+      className: 'tv-popup',
+      anchor: 'bottom',
+      focusAfterOpen: false,
+    })
+      .setLngLat(lngLat)
+      .setDOMContent(node)
+      .addTo(map)
+
+    return () => {
+      popup.remove()
+      root.unmount()
+    }
+  }, [selected, data, popupMode])
 
   return <div ref={rootRef} className="h-full w-full" />
 }
@@ -124,7 +221,7 @@ function syncMap(
   map: MapLibreMap,
   data: MapData,
   filters: LayerFilters,
-  onSelect: (item: SelectedItem) => void,
+  onSelect: (item: SelectedItem | null) => void,
   markersRef: {current: Marker[]},
 ) {
   markersRef.current.forEach((marker) => marker.remove())
@@ -133,12 +230,13 @@ function syncMap(
 
   const bounds = new LngLatBounds()
   let hasPoint = false
+  const colors = trackColors(data.tracks.map((track) => track._id))
 
   if (filters.tracks) {
     for (const track of data.tracks) {
       const coords = lineCoordinates(track.route)
       if (coords.length < 2) continue
-      const color = trackColor(track._id)
+      const color = colors.get(track._id) ?? '#111'
       const sourceId = `track-src-${track._id}`
       const layerId = `track-line-${track._id}`
       map.addSource(sourceId, {

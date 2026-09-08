@@ -67,7 +67,11 @@ export function MapApp({data}: Props) {
           Nothing mapped yet.
         </p>
       ) : null}
-      {card ? <InfoCard data={data} selected={card} onClose={() => setSelected(null)} /> : null}
+      {card ? (
+        <div className="md:hidden">
+          <InfoCard data={data} selected={card} onClose={() => setSelected(null)} placement="sheet" />
+        </div>
+      ) : null}
     </div>
   )
 }

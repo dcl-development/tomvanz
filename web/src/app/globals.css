@@ -19,5 +19,36 @@ button {
 
 .maplibregl-marker button[data-active='true'] {
   outline: 2px solid #111;
-  outline-offset: 2px;
+  outline-offset: 3px;
+  z-index: 2;
+}
+
+.tv-popup.maplibregl-popup {
+  z-index: 20;
+}
+
+.tv-popup .maplibregl-popup-content {
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  border-radius: 0;
+}
+
+.tv-popup.maplibregl-popup-anchor-bottom .maplibregl-popup-tip {
+  border-top-color: #fff;
+}
+
+@keyframes tv-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.tv-card {
+  animation: tv-card-in 220ms ease-out;
 }

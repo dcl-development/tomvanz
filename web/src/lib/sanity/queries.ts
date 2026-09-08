@@ -15,7 +15,8 @@ export const mapQuery = defineQuery(`{
     title,
     activity,
     startedAt,
-    route
+    route,
+    photo
   },
   "pins": *[_type == "pin" && defined(location.lat) && defined(location.lng)] | order(at desc) {
     _id,
