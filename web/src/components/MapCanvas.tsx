@@ -7,7 +7,7 @@ import '@/lib/maplibre-worker'
 import {urlFor} from '@/lib/sanity/image'
 import {trackColor} from '@/lib/track-color'
 import type {LayerFilters} from './MapLayers'
-import type {MapData, PinKind, SelectedItem} from '@/lib/sanity/types'
+import {lineCoordinates, type MapData, PinKind, SelectedItem} from '@/lib/sanity/types'
 
 const STYLE = 'https://tiles.openfreemap.org/styles/positron'
 
@@ -136,8 +136,8 @@ function syncMap(
 
   if (filters.tracks) {
     for (const track of data.tracks) {
-      const coords = track.route?.coordinates
-      if (!coords || coords.length < 2) continue
+      const coords = lineCoordinates(track.route)
+      if (coords.length < 2) continue
       const color = trackColor(track._id)
       const sourceId = `track-src-${track._id}`
       const layerId = `track-line-${track._id}`

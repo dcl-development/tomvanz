@@ -37,7 +37,16 @@ export function GpxInput(props: ObjectInputProps) {
       )
       if (documentId) {
         const draftId = documentId.startsWith('drafts.') ? documentId : `drafts.${documentId}`
-        await client.patch(draftId).set({route: line}).commit({autoGenerateArrayKeys: true})
+        await client.patch(draftId).set({
+          route: {
+            type: 'LineString',
+            coordinates: line.coordinates.map(([lng, lat]) => ({
+              _type: 'geopoint',
+              lng,
+              lat,
+            })),
+          },
+        }).commit({autoGenerateArrayKeys: true})
       }
       setMessage('ok')
     } catch (caught) {

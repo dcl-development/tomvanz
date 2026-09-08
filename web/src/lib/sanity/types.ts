@@ -21,8 +21,29 @@ export type TrackDoc = {
   startedAt?: string
   route: {
     type: 'LineString'
-    coordinates: [number, number][]
+    coordinates: Array<Geopoint | [number, number]>
   }
+}
+
+export function lineCoordinates(route: TrackDoc['route'] | undefined): [number, number][] {
+  const points = route?.coordinates
+  if (!Array.isArray(points)) return []
+
+  const coords: [number, number][] = []
+  for (const point of points) {
+    if (Array.isArray(point) && point.length >= 2) {
+      const lng = Number(point[0])
+      const lat = Number(point[1])
+      if (Number.isFinite(lng) && Number.isFinite(lat)) coords.push([lng, lat])
+      continue
+    }
+    if (point && typeof point === 'object') {
+      const lng = Number(point.lng)
+      const lat = Number(point.lat)
+      if (Number.isFinite(lng) && Number.isFinite(lat)) coords.push([lng, lat])
+    }
+  }
+  return coords
 }
 
 export type PinKind = 'catch' | 'mountain' | 'park' | 'place'
