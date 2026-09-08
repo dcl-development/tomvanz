@@ -2,7 +2,7 @@
 
 import {useMemo, useState} from 'react'
 import dynamic from 'next/dynamic'
-import {HeaderBar, type LayerFilters} from './HeaderBar'
+import {MapLayers, type LayerFilters} from './MapLayers'
 import {InfoCard} from './InfoCard'
 import type {MapData, SelectedItem} from '@/lib/sanity/types'
 
@@ -42,34 +42,32 @@ export function MapApp({data}: Props) {
   const card = selectedStillVisible ? selected : null
 
   return (
-    <div className="flex h-dvh w-full flex-col overflow-hidden bg-white">
-      <HeaderBar name={data.name} filters={filters} onChange={setFilters} />
-      <div className="relative min-h-0 flex-1 bg-[#e8e8e8]">
-        {mapFailed ? (
-          <div className="flex h-full items-center justify-center text-[14px] text-black/70">
-            Couldn’t load the map.
-          </div>
-        ) : (
-          <MapCanvas
-            data={data}
-            filters={filters}
-            selected={card}
-            onSelect={setSelected}
-            onMapError={() => setMapFailed(true)}
-          />
-        )}
-        {!mapFailed && total === 0 ? (
-          <p className="pointer-events-none absolute left-4 top-4 z-10 text-[14px] text-black/55">
-            Nothing mapped yet.
-          </p>
-        ) : null}
-        {!mapFailed && total > 0 && visibleCount === 0 ? (
-          <p className="pointer-events-none absolute left-4 top-4 z-10 text-[14px] text-black/55">
-            Nothing mapped yet.
-          </p>
-        ) : null}
-        {card ? <InfoCard data={data} selected={card} onClose={() => setSelected(null)} /> : null}
-      </div>
+    <div className="relative h-full w-full overflow-hidden bg-[#e8e8e8]">
+      {mapFailed ? (
+        <div className="flex h-full items-center justify-center text-[14px] text-black/70">
+          Couldn’t load the map.
+        </div>
+      ) : (
+        <MapCanvas
+          data={data}
+          filters={filters}
+          selected={card}
+          onSelect={setSelected}
+          onMapError={() => setMapFailed(true)}
+        />
+      )}
+      {!mapFailed ? <MapLayers filters={filters} onChange={setFilters} /> : null}
+      {!mapFailed && total === 0 ? (
+        <p className="pointer-events-none absolute left-4 top-4 z-10 text-[14px] text-black/55">
+          Nothing mapped yet.
+        </p>
+      ) : null}
+      {!mapFailed && total > 0 && visibleCount === 0 ? (
+        <p className="pointer-events-none absolute left-4 top-4 z-10 text-[14px] text-black/55">
+          Nothing mapped yet.
+        </p>
+      ) : null}
+      {card ? <InfoCard data={data} selected={card} onClose={() => setSelected(null)} /> : null}
     </div>
   )
 }

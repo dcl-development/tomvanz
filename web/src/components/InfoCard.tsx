@@ -66,7 +66,7 @@ export function InfoCard({data, selected, onClose}: Props) {
   }
 
   return (
-    <aside className="absolute inset-x-3 bottom-3 z-20 max-h-[70vh] overflow-auto rounded-lg bg-white p-4 shadow-lg ring-1 ring-black/10 md:inset-x-auto md:top-4 md:right-4 md:bottom-auto md:w-[320px]">
+    <aside className="absolute inset-x-3 bottom-3 z-20 max-h-[70vh] overflow-auto rounded-lg bg-white p-4 shadow-lg ring-1 ring-black/10 md:inset-x-auto md:top-14 md:right-4 md:bottom-auto md:w-[320px]">
       <div className="mb-3 flex items-start justify-between gap-3">
         <div className="flex items-center gap-2">
           {kind ? <PinShape kind={kind} className="h-4 w-4 text-black" /> : null}

@@ -6,7 +6,7 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 import '@/lib/maplibre-worker'
 import {urlFor} from '@/lib/sanity/image'
 import {trackColor} from '@/lib/track-color'
-import type {LayerFilters} from './HeaderBar'
+import type {LayerFilters} from './MapLayers'
 import type {MapData, PinKind, SelectedItem} from '@/lib/sanity/types'
 
 const STYLE = 'https://tiles.openfreemap.org/styles/positron'
