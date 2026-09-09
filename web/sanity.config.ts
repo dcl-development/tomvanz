@@ -11,4 +11,7 @@ export default defineConfig({
   basePath: '/studio',
   plugins: [structureTool({structure})],
   schema: {types: schemaTypes},
+  document: {
+    newDocumentOptions: (prev) => prev.filter((item) => item.templateId !== 'photo'),
+  },
 })

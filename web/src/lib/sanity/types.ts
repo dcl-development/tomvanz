@@ -80,12 +80,10 @@ export type PinDoc = {
 
 export type MapData = {
   name: string
-  photos: PhotoDoc[]
   tracks: TrackDoc[]
   pins: PinDoc[]
 }
 
 export type SelectedItem =
-  | {kind: 'photo'; id: string}
   | {kind: 'track'; id: string; lng?: number; lat?: number}
   | {kind: 'pin'; id: string}

@@ -19,7 +19,7 @@ type Props = {
   data: MapData
 }
 
-const emptyFilters: LayerFilters = {photos: true, tracks: true, pins: true}
+const emptyFilters: LayerFilters = {tracks: true, pins: true}
 
 export function MapApp({data}: Props) {
   const [filters, setFilters] = useState<LayerFilters>(emptyFilters)
@@ -27,14 +27,11 @@ export function MapApp({data}: Props) {
   const [mapFailed, setMapFailed] = useState(false)
 
   const visibleCount =
-    (filters.photos ? data.photos.length : 0) +
-    (filters.tracks ? data.tracks.length : 0) +
-    (filters.pins ? data.pins.length : 0)
-  const total = data.photos.length + data.tracks.length + data.pins.length
+    (filters.tracks ? data.tracks.length : 0) + (filters.pins ? data.pins.length : 0)
+  const total = data.tracks.length + data.pins.length
 
   const selectedStillVisible = useMemo(() => {
     if (!selected) return false
-    if (selected.kind === 'photo') return filters.photos && data.photos.some((item) => item._id === selected.id)
     if (selected.kind === 'track') return filters.tracks && data.tracks.some((item) => item._id === selected.id)
     return filters.pins && data.pins.some((item) => item._id === selected.id)
   }, [selected, filters, data])

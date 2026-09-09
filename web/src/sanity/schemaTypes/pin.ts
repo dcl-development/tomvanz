@@ -1,4 +1,5 @@
 import {defineField, defineType} from 'sanity'
+import {CatchImageInput} from '../components/CatchImageInput'
 import {MapGeopointInput} from '../components/MapGeopointInput'
 
 export const pin = defineType({
@@ -39,7 +40,13 @@ export const pin = defineType({
       name: 'photo',
       title: 'Photo',
       type: 'image',
-      options: {hotspot: false},
+      description: 'Optional. If it has GPS, the pin drops itself.',
+      options: {
+        accept: 'image/*',
+        hotspot: true,
+        metadata: ['exif', 'location'],
+      },
+      components: {input: CatchImageInput},
     }),
     defineField({
       name: 'note',

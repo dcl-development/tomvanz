@@ -46,25 +46,6 @@ function activityLabel(activity: string) {
 }
 
 function cardModel(data: MapData, selected: SelectedItem): CardModel | null {
-  if (selected.kind === 'photo') {
-    const photo = data.photos.find((item) => item._id === selected.id)
-    if (!photo) return null
-    const when = formatDate(photo.takenAt)
-    return {
-      title: photo.fish,
-      eyebrow: 'Trip',
-      stats: when ? [when] : [],
-      body: photo.caption ?? null,
-      imageUrl: photo.image?.asset
-        ? urlFor(photo.image).width(900).height(560).fit('crop').url()
-        : null,
-      imageAlt: photo.fish,
-      accent: '#111',
-      kind: 'trip',
-      dashed: false,
-    }
-  }
-
   if (selected.kind === 'track') {
     const track = data.tracks.find((item) => item._id === selected.id)
     if (!track) return null

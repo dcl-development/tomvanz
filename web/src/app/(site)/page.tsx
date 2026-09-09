@@ -12,7 +12,6 @@ export const dynamic = 'force-dynamic'
 
 const empty: MapData = {
   name: 'Tom Vanz',
-  photos: [],
   tracks: [],
   pins: [],
 }

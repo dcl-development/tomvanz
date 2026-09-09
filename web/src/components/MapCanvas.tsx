@@ -36,10 +36,6 @@ function pinSvg(kind: PinKind) {
 }
 
 function selectionPoint(data: MapData, selected: SelectedItem): [number, number] | null {
-  if (selected.kind === 'photo') {
-    const photo = data.photos.find((item) => item._id === selected.id)
-    return photo ? [photo.location.lng, photo.location.lat] : null
-  }
   if (selected.kind === 'pin') {
     const pin = data.pins.find((item) => item._id === selected.id)
     return pin ? [pin.location.lng, pin.location.lat] : null
@@ -292,17 +288,33 @@ function syncMap(
 
   if (filters.pins) {
     for (const pin of data.pins) {
+      const thumb = pin.photo?.asset
+        ? urlFor(pin.photo).width(80).height(80).fit('crop').url()
+        : ''
       const el = document.createElement('button')
       el.type = 'button'
       el.dataset.kind = 'pin'
       el.dataset.id = pin._id
       el.setAttribute('aria-label', pin.title)
-      el.innerHTML = pinSvg(pin.kind)
-      el.style.background = 'transparent'
-      el.style.border = '0'
-      el.style.padding = '0'
+      if (thumb) {
+        el.style.width = '28px'
+        el.style.height = '28px'
+        el.style.padding = '0'
+        el.style.border = '1px solid white'
+        el.style.borderRadius = '2px'
+        el.style.boxShadow = '0 1px 4px rgba(0,0,0,0.28)'
+        el.style.backgroundImage = `url(${thumb})`
+        el.style.backgroundSize = 'cover'
+        el.style.backgroundPosition = 'center'
+        el.style.backgroundColor = '#111'
+      } else {
+        el.innerHTML = pinSvg(pin.kind)
+        el.style.background = 'transparent'
+        el.style.border = '0'
+        el.style.padding = '0'
+        el.style.lineHeight = '0'
+      }
       el.style.cursor = 'pointer'
-      el.style.lineHeight = '0'
       el.addEventListener('click', (event) => {
         event.stopPropagation()
         onSelect({kind: 'pin', id: pin._id})
@@ -312,40 +324,6 @@ function syncMap(
         .addTo(map)
       markersRef.current.push(marker)
       bounds.extend([pin.location.lng, pin.location.lat])
-      hasPoint = true
-    }
-  }
-
-  if (filters.photos) {
-    for (const photo of data.photos) {
-      const thumb = photo.image
-        ? urlFor(photo.image).width(80).height(80).fit('crop').url()
-        : ''
-      const el = document.createElement('button')
-      el.type = 'button'
-      el.dataset.kind = 'photo'
-      el.dataset.id = photo._id
-      el.setAttribute('aria-label', photo.fish)
-      el.style.width = '28px'
-      el.style.height = '28px'
-      el.style.padding = '0'
-      el.style.border = '1px solid white'
-      el.style.borderRadius = '2px'
-      el.style.boxShadow = '0 1px 4px rgba(0,0,0,0.28)'
-      el.style.backgroundImage = thumb ? `url(${thumb})` : 'none'
-      el.style.backgroundSize = 'cover'
-      el.style.backgroundPosition = 'center'
-      el.style.backgroundColor = '#111'
-      el.style.cursor = 'pointer'
-      el.addEventListener('click', (event) => {
-        event.stopPropagation()
-        onSelect({kind: 'photo', id: photo._id})
-      })
-      const marker = new Marker({element: el, anchor: 'center'})
-        .setLngLat([photo.location.lng, photo.location.lat])
-        .addTo(map)
-      markersRef.current.push(marker)
-      bounds.extend([photo.location.lng, photo.location.lat])
       hasPoint = true
     }
   }

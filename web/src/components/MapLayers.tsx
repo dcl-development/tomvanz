@@ -1,9 +1,8 @@
 'use client'
 
-import {CatchShape, PhotoShape, TrackShape} from './shapes'
+import {CatchShape, TrackShape} from './shapes'
 
 export type LayerFilters = {
-  photos: boolean
   tracks: boolean
   pins: boolean
 }
@@ -16,13 +15,6 @@ type Props = {
 export function MapLayers({filters, onChange}: Props) {
   return (
     <div className="absolute right-3 top-3 z-10 flex items-center gap-1 rounded-full bg-white/90 px-1 py-1 shadow-sm ring-1 ring-black/10 md:right-4 md:top-4">
-      <FilterChip
-        label="Photos"
-        active={filters.photos}
-        onClick={() => onChange({...filters, photos: !filters.photos})}
-      >
-        <PhotoShape className="h-3.5 w-3.5" />
-      </FilterChip>
       <FilterChip
         label="Tracks"
         active={filters.tracks}
