@@ -7,7 +7,7 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 import '@/lib/maplibre-worker'
 import {InfoCard} from './InfoCard'
 import {urlFor} from '@/lib/sanity/image'
-import {trackColors} from '@/lib/track-color'
+import {trackColor} from '@/lib/track-color'
 import type {LayerFilters} from './MapLayers'
 import {lineCoordinates, type MapData, PinKind, SelectedItem} from '@/lib/sanity/types'
 
@@ -194,7 +194,7 @@ export function MapCanvas({data, filters, selected, onSelect, onMapError}: Props
 
     return () => {
       popup.remove()
-      root.unmount()
+      queueMicrotask(() => root.unmount())
     }
   }, [selected, data, popupMode])
 
@@ -230,13 +230,12 @@ function syncMap(
 
   const bounds = new LngLatBounds()
   let hasPoint = false
-  const colors = trackColors(data.tracks.map((track) => track._id))
 
   if (filters.tracks) {
     for (const track of data.tracks) {
       const coords = lineCoordinates(track.route)
       if (coords.length < 2) continue
-      const color = colors.get(track._id) ?? '#111'
+      const color = trackColor(track.activity)
       const sourceId = `track-src-${track._id}`
       const layerId = `track-line-${track._id}`
       map.addSource(sourceId, {

@@ -82,7 +82,7 @@ function cardModel(data: MapData, selected: SelectedItem): CardModel | null {
         ? urlFor(track.photo).width(900).height(560).fit('crop').url()
         : null,
       imageAlt: track.title,
-      accent: trackColor(track._id, data.tracks.map((item) => item._id)),
+      accent: trackColor(track.activity),
       kind: null,
       dashed: track.activity === 'hike',
     }
