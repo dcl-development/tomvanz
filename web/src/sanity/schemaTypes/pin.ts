@@ -18,7 +18,7 @@ export const pin = defineType({
       type: 'string',
       options: {
         list: [
-          {title: 'Catch', value: 'catch'},
+          {title: 'Trip', value: 'trip'},
           {title: 'Mountain', value: 'mountain'},
           {title: 'Park', value: 'park'},
           {title: 'Place', value: 'place'},

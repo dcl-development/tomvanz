@@ -33,7 +33,7 @@ function formatDate(value?: string) {
 }
 
 function kindLabel(kind: PinKind) {
-  if (kind === 'catch') return 'Catch'
+  if (kind === 'trip') return 'Trip'
   if (kind === 'mountain') return 'Mountain'
   if (kind === 'park') return 'Park'
   return 'Place'
@@ -52,7 +52,7 @@ function cardModel(data: MapData, selected: SelectedItem): CardModel | null {
     const when = formatDate(photo.takenAt)
     return {
       title: photo.fish,
-      eyebrow: 'Catch',
+      eyebrow: 'Trip',
       stats: when ? [when] : [],
       body: photo.caption ?? null,
       imageUrl: photo.image?.asset
@@ -60,7 +60,7 @@ function cardModel(data: MapData, selected: SelectedItem): CardModel | null {
         : null,
       imageAlt: photo.fish,
       accent: '#111',
-      kind: 'catch',
+      kind: 'trip',
       dashed: false,
     }
   }

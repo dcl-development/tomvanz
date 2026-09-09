@@ -64,7 +64,7 @@ function toLngLat(point: unknown): [number, number] | null {
   return null
 }
 
-export type PinKind = 'catch' | 'mountain' | 'park' | 'place'
+export type PinKind = 'trip' | 'mountain' | 'park' | 'place'
 
 export type PinDoc = {
   _id: string
@@ -87,5 +87,5 @@ export type MapData = {
 
 export type SelectedItem =
   | {kind: 'photo'; id: string}
-  | {kind: 'track'; id: string}
+  | {kind: 'track'; id: string; lng?: number; lat?: number}
   | {kind: 'pin'; id: string}

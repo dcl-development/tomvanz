@@ -1,3 +1,5 @@
+import type {PinKind} from '@/lib/sanity/types'
+
 type ShapeProps = {
   className?: string
 }
@@ -56,8 +58,8 @@ export function PlaceShape({className}: ShapeProps) {
   )
 }
 
-export function PinShape({kind, className}: {kind: 'catch' | 'mountain' | 'park' | 'place'; className?: string}) {
-  if (kind === 'catch') return <CatchShape className={className} />
+export function PinShape({kind, className}: {kind: PinKind; className?: string}) {
+  if (kind === 'trip') return <CatchShape className={className} />
   if (kind === 'mountain') return <MountainShape className={className} />
   if (kind === 'park') return <ParkShape className={className} />
   return <PlaceShape className={className} />

@@ -136,7 +136,7 @@ export function CatchImageInput(props: ObjectInputProps) {
             <Text size={1} weight="semibold">
               This photo has no location.
             </Text>
-            <Text size={1}>Drop a pin on the map below so this catch can show.</Text>
+            <Text size={1}>Drop a pin on the map below so this trip can show.</Text>
           </Stack>
         </Card>
       ) : null}

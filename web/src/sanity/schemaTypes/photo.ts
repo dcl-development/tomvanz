@@ -4,14 +4,14 @@ import {MapGeopointInput} from '../components/MapGeopointInput'
 
 export const photo = defineType({
   name: 'photo',
-  title: 'Catch photo',
+  title: 'Trip photo',
   type: 'document',
   fields: [
     defineField({
       name: 'fish',
-      title: 'Fish',
+      title: 'Title',
       type: 'string',
-      description: 'What he caught.',
+      description: 'Name of the trip.',
       validation: (Rule) => Rule.required(),
     }),
     defineField({
@@ -34,7 +34,7 @@ export const photo = defineType({
       validation: (Rule) =>
         Rule.custom((value) => {
           if (value?.lat == null || value?.lng == null) {
-            return 'This catch will not show on the map until you drop a pin.'
+            return 'This trip will not show on the map until you drop a pin.'
           }
           return true
         }),
@@ -58,7 +58,7 @@ export const photo = defineType({
     },
     prepare({fish, media, lat}) {
       return {
-        title: fish || 'Catch',
+        title: fish || 'Trip',
         subtitle: lat == null ? 'No location — off the map' : undefined,
         media,
       }

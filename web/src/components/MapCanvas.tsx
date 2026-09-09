@@ -23,7 +23,7 @@ type Props = {
 
 function pinSvg(kind: PinKind) {
   const halo = 'stroke="white" stroke-width="2"'
-  if (kind === 'catch') {
+  if (kind === 'trip') {
     return `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.2" fill="#111" ${halo}/></svg>`
   }
   if (kind === 'mountain') {
@@ -43,6 +43,9 @@ function selectionPoint(data: MapData, selected: SelectedItem): [number, number]
   if (selected.kind === 'pin') {
     const pin = data.pins.find((item) => item._id === selected.id)
     return pin ? [pin.location.lng, pin.location.lat] : null
+  }
+  if (selected.lng != null && selected.lat != null) {
+    return [selected.lng, selected.lat]
   }
   const track = data.tracks.find((item) => item._id === selected.id)
   if (!track) return null
