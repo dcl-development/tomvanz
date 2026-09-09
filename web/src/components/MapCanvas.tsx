@@ -48,6 +48,12 @@ function selectionPoint(data: MapData, selected: SelectedItem): [number, number]
   return lineCoordinates(track.route)[0] ?? null
 }
 
+function hitLayerIds(map: MapLibreMap): string[] {
+  return (map.getStyle()?.layers ?? [])
+    .map((layer) => layer.id)
+    .filter((id) => id.startsWith('track-hit-'))
+}
+
 export function MapCanvas({data, filters, selected, onSelect, onMapError}: Props) {
   const rootRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<MapLibreMap | null>(null)
@@ -93,7 +99,32 @@ export function MapCanvas({data, filters, selected, onSelect, onMapError}: Props
     mapRef.current = map
     map.addControl(new NavigationControl({showCompass: false}), 'bottom-right')
     map.on('error', () => onMapErrorRef.current())
-    map.on('click', () => onSelectRef.current(null))
+    map.on('click', (event) => {
+      const layers = hitLayerIds(map)
+      if (layers.length) {
+        const hit = map.queryRenderedFeatures(event.point, {layers})[0]
+        const id = hit?.properties?.id
+        if (typeof id === 'string' && id) {
+          onSelectRef.current({
+            kind: 'track',
+            id,
+            lng: event.lngLat.lng,
+            lat: event.lngLat.lat,
+          })
+          return
+        }
+      }
+      onSelectRef.current(null)
+    })
+    map.on('mousemove', (event) => {
+      const layers = hitLayerIds(map)
+      if (!layers.length) {
+        map.getCanvas().style.cursor = ''
+        return
+      }
+      const hovering = map.queryRenderedFeatures(event.point, {layers}).length > 0
+      map.getCanvas().style.cursor = hovering ? 'pointer' : ''
+    })
     map.on('load', () => {
       syncMap(map, dataRef.current, filtersRef.current, onSelectRef.current, markersRef)
     })
@@ -137,21 +168,7 @@ export function MapCanvas({data, filters, selected, onSelect, onMapError}: Props
     if (!map?.loaded() || !selected) return
     const point = selectionPoint(data, selected)
     if (!point) return
-
-    if (selected.kind === 'track') {
-      const track = data.tracks.find((item) => item._id === selected.id)
-      const coords = track ? lineCoordinates(track.route) : []
-      if (coords.length >= 2) {
-        const bounds = new LngLatBounds()
-        for (const coord of coords) bounds.extend(coord)
-        map.fitBounds(bounds, {
-          padding: {top: 88, bottom: popupMode ? 96 : 300, left: 48, right: 48},
-          maxZoom: 13,
-          duration: 700,
-        })
-        return
-      }
-    }
+    if (selected.kind === 'track') return
 
     map.easeTo({
       center: point,
@@ -181,7 +198,7 @@ export function MapCanvas({data, filters, selected, onSelect, onMapError}: Props
     const popup = new Popup({
       closeButton: false,
       closeOnClick: false,
-      offset: 18,
+      offset: 8,
       maxWidth: '320px',
       className: 'tv-popup',
       anchor: 'bottom',
@@ -204,7 +221,7 @@ function clearTrackLayers(map: MapLibreMap) {
   const style = map.getStyle()
   if (!style?.layers) return
   for (const layer of [...style.layers]) {
-    if (layer.id.startsWith('track-line-')) {
+    if (layer.id.startsWith('track-line-') || layer.id.startsWith('track-hit-')) {
       if (map.getLayer(layer.id)) map.removeLayer(layer.id)
     }
   }
@@ -237,12 +254,24 @@ function syncMap(
       const color = trackColor(track.activity)
       const sourceId = `track-src-${track._id}`
       const layerId = `track-line-${track._id}`
+      const hitId = `track-hit-${track._id}`
       map.addSource(sourceId, {
         type: 'geojson',
         data: {
           type: 'Feature',
-          properties: {},
+          properties: {id: track._id},
           geometry: {type: 'LineString', coordinates: coords},
+        },
+      })
+      map.addLayer({
+        id: hitId,
+        type: 'line',
+        source: sourceId,
+        layout: {'line-join': 'round', 'line-cap': 'round'},
+        paint: {
+          'line-color': color,
+          'line-width': 18,
+          'line-opacity': 0,
         },
       })
       map.addLayer({
@@ -260,29 +289,6 @@ function syncMap(
         bounds.extend([lng, lat])
         hasPoint = true
       }
-
-      const start = coords[0]
-      const el = document.createElement('button')
-      el.type = 'button'
-      el.dataset.kind = 'track'
-      el.dataset.id = track._id
-      el.setAttribute('aria-label', track.title)
-      el.style.width = '16px'
-      el.style.height = '16px'
-      el.style.borderRadius = '999px'
-      el.style.background = color
-      el.style.border = '2px solid white'
-      el.style.boxShadow = '0 1px 3px rgba(0,0,0,0.25)'
-      el.style.cursor = 'pointer'
-      el.style.padding = '0'
-      el.addEventListener('click', (event) => {
-        event.stopPropagation()
-        onSelect({kind: 'track', id: track._id})
-      })
-      const marker = new Marker({element: el, anchor: 'center'})
-        .setLngLat(start)
-        .addTo(map)
-      markersRef.current.push(marker)
     }
   }
 
