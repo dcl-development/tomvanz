@@ -35,8 +35,11 @@ export type EncodeResult = {
   blob: Blob
 }
 
-/** Max estimated compressed size kept in memory for one clip at a time. */
+/** Max estimated compressed size for one clip encode. */
 export const MAX_OUTPUT_BYTES_IN_MEMORY = Math.floor(1.5 * 1024 ** 3)
+
+/** Max total estimated output held in memory across done + pending clips. */
+export const MAX_BATCH_ESTIMATED_OUTPUT_BYTES = 2 * 1024 ** 3
 
 export function checkEstimatedOutputSize(
   estimatedOutputBytes: number,
@@ -48,6 +51,26 @@ export function checkEstimatedOutputSize(
     }
   }
   return {ok: true}
+}
+
+export function checkBatchEstimatedOutputSize(
+  totalEstimatedBytes: number,
+): {ok: true} | {ok: false; error: string} {
+  if (totalEstimatedBytes > MAX_BATCH_ESTIMATED_OUTPUT_BYTES) {
+    return {
+      ok: false,
+      error: `These clips would use about ${formatBytes(totalEstimatedBytes)} in memory. Download or remove some finished clips first, or compress fewer at a time.`,
+    }
+  }
+  return {ok: true}
+}
+
+function blobFromBufferTarget(target: BufferTarget): Blob {
+  const buffer = target.buffer
+  if (!buffer) throw new Error('No output was produced.')
+  const blob = new Blob([buffer], {type: 'video/mp4'})
+  target.buffer = null
+  return blob
 }
 
 export async function compressVideoFile(
@@ -139,10 +162,11 @@ export async function compressVideoFile(
     }
 
     await output.finalize()
-    const buffer = target.buffer
-    if (!buffer) throw new Error('No output was produced.')
-    const blob = new Blob([buffer], {type: 'video/mp4'})
+    const blob = blobFromBufferTarget(target)
     return {fileName: suggestedName, blob}
+  } catch (error) {
+    void conversion?.cancel()
+    throw error
   } finally {
     input.dispose()
   }

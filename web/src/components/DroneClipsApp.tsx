@@ -3,6 +3,7 @@
 import {useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore} from 'react'
 
 import {
+  checkBatchEstimatedOutputSize,
   checkEstimatedOutputSize,
   compressVideoFile,
   type EncodeResult,
@@ -39,10 +40,17 @@ type QueueItem = {
   canDownload: boolean
 }
 
+type BatchSummary = {
+  done: number
+  failed: number
+  total: number
+} | null
+
 function newId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 }
 
+/** One object URL per download; revoked shortly after the click so nothing persists per clip. */
 function triggerDownload(blob: Blob, fileName: string) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
@@ -52,7 +60,7 @@ function triggerDownload(blob: Blob, fileName: string) {
   document.body.append(a)
   a.click()
   a.remove()
-  URL.revokeObjectURL(url)
+  window.setTimeout(() => URL.revokeObjectURL(url), 250)
 }
 
 const SUPPORT_OK: WebCodecsSupport = {supported: true, reason: null}
@@ -74,6 +82,9 @@ export function DroneClipsApp() {
   const [modeId, setModeId] = useState<CompressModeId>(DEFAULT_MODE_ID)
   const [items, setItems] = useState<QueueItem[]>([])
   const [busy, setBusy] = useState(false)
+  const [batchSummary, setBatchSummary] = useState<BatchSummary>(null)
+  const [batchWarning, setBatchWarning] = useState<string | null>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
   const cancelRef = useRef<AbortController | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const downloadBlobsRef = useRef<Map<string, EncodeResult>>(new Map())
@@ -95,6 +106,13 @@ export function DroneClipsApp() {
   )
 
   const hasPendingClips = useMemo(() => items.some((item) => item.status !== 'done'), [items])
+
+  const doneItems = useMemo(() => items.filter((item) => item.status === 'done' && item.canDownload), [items])
+
+  const selectedDoneCount = useMemo(
+    () => doneItems.filter((item) => selectedIds.has(item.id)).length,
+    [doneItems, selectedIds],
+  )
 
   const updateItem = useCallback((id: string, patch: Partial<QueueItem>) => {
     setItems((prev) => prev.map((item) => (item.id === id ? {...item, ...patch} : item)))
@@ -129,6 +147,8 @@ export function DroneClipsApp() {
     (fileList: FileList | File[]) => {
       const files = Array.from(fileList).filter((f) => f.type.startsWith('video/') || /\.(mov|mp4|m4v)$/i.test(f.name))
       if (files.length === 0) return
+      setBatchSummary(null)
+      setBatchWarning(null)
       const next: QueueItem[] = files.map((file) => ({
         id: newId(),
         file,
@@ -156,9 +176,26 @@ export function DroneClipsApp() {
     [addFiles],
   )
 
+  const removeClip = useCallback(
+    (id: string) => {
+      if (busy) return
+      downloadBlobsRef.current.delete(id)
+      setSelectedIds((prev) => {
+        const next = new Set(prev)
+        next.delete(id)
+        return next
+      })
+      setItems((prev) => prev.filter((item) => item.id !== id))
+    },
+    [busy],
+  )
+
   const clearQueue = useCallback(() => {
     if (busy) return
     downloadBlobsRef.current.clear()
+    setSelectedIds(new Set())
+    setBatchSummary(null)
+    setBatchWarning(null)
     setItems([])
   }, [busy])
 
@@ -166,10 +203,37 @@ export function DroneClipsApp() {
     cancelRef.current?.abort()
   }, [])
 
+  const toggleSelected = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
+
+  const selectAllDone = useCallback(() => {
+    setSelectedIds(new Set(doneItems.map((item) => item.id)))
+  }, [doneItems])
+
+  const selectNoneDone = useCallback(() => {
+    setSelectedIds(new Set())
+  }, [])
+
+  const downloadSelected = useCallback(async () => {
+    const ordered = doneItems.filter((item) => selectedIds.has(item.id))
+    for (const item of ordered) {
+      const saved = downloadBlobsRef.current.get(item.id)
+      if (!saved) continue
+      triggerDownload(saved.blob, saved.fileName)
+      await new Promise((resolve) => window.setTimeout(resolve, 400))
+    }
+  }, [doneItems, selectedIds])
+
   const encodeClip = useCallback(
     async (itemId: string, signal: AbortSignal) => {
       const item = itemsRef.current.find((entry) => entry.id === itemId)
-      if (!item || item.status === 'done') return
+      if (!item || item.status === 'done') return 'skipped' as const
 
       const estimated = estimateOutputBytes(item.file.size, mode)
       const sizeCheck = checkEstimatedOutputSize(estimated)
@@ -180,7 +244,7 @@ export function DroneClipsApp() {
           message: sizeCheck.error,
           canDownload: false,
         })
-        return
+        return 'error' as const
       }
 
       downloadBlobsRef.current.delete(itemId)
@@ -203,14 +267,15 @@ export function DroneClipsApp() {
         )
 
         downloadBlobsRef.current.set(itemId, result)
+        setSelectedIds((prev) => new Set(prev).add(itemId))
         updateItem(itemId, {
           status: 'done',
           progress: 100,
           downloadFileName: result.fileName,
           canDownload: true,
-          message: 'Saved to your Downloads folder. Tap Download if you need another copy.',
+          message: 'Ready — use Download when you want a copy on disk.',
         })
-        triggerDownload(result.blob, result.fileName)
+        return 'done' as const
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Something went wrong.'
         if (message === 'Canceled') {
@@ -218,6 +283,7 @@ export function DroneClipsApp() {
           throw error
         }
         updateItem(itemId, {status: 'error', progress: 0, message, canDownload: false})
+        return 'error' as const
       }
     },
     [mode, updateItem],
@@ -228,9 +294,31 @@ export function DroneClipsApp() {
     const queue = itemsRef.current.filter((item) => item.status !== 'done')
     if (queue.length === 0) return
 
+    const doneBytes = itemsRef.current
+      .filter((item) => item.status === 'done')
+      .reduce((sum, item) => {
+        const blob = downloadBlobsRef.current.get(item.id)?.blob
+        return sum + (blob?.size ?? estimateOutputBytes(item.file.size, mode))
+      }, 0)
+    const pendingEstimate = queue.reduce(
+      (sum, item) => sum + estimateOutputBytes(item.file.size, mode),
+      0,
+    )
+    const batchCheck = checkBatchEstimatedOutputSize(doneBytes + pendingEstimate)
+    if (!batchCheck.ok) {
+      setBatchWarning(batchCheck.error)
+      return
+    }
+    setBatchWarning(null)
+    setBatchSummary(null)
+
     setBusy(true)
     const abort = new AbortController()
     cancelRef.current = abort
+
+    let done = 0
+    let failed = 0
+    const total = queue.length
 
     try {
       for (const item of queue) {
@@ -238,7 +326,9 @@ export function DroneClipsApp() {
         const latest = itemsRef.current.find((entry) => entry.id === item.id)
         if (!latest || latest.status === 'done') continue
         try {
-          await encodeClip(item.id, abort.signal)
+          const outcome = await encodeClip(item.id, abort.signal)
+          if (outcome === 'done') done += 1
+          else if (outcome === 'error') failed += 1
         } catch (error) {
           if (error instanceof Error && error.message === 'Canceled') break
         }
@@ -246,8 +336,20 @@ export function DroneClipsApp() {
     } finally {
       setBusy(false)
       cancelRef.current = null
+      const stillPending = itemsRef.current.filter((item) => item.status !== 'done' && item.status !== 'error' && item.status !== 'canceled')
+      if (!abort.signal.aborted && stillPending.length === 0) {
+        const finalDone = itemsRef.current.filter((i) => i.status === 'done').length
+        const finalFailed = itemsRef.current.filter((i) => i.status === 'error' || i.status === 'canceled').length
+        if (finalFailed === 0) {
+          setBatchSummary({done: finalDone, failed: 0, total: finalDone})
+        } else {
+          setBatchSummary({done: finalDone, failed: finalFailed, total: finalDone + finalFailed})
+        }
+      } else if (!abort.signal.aborted) {
+        setBatchSummary({done, failed, total})
+      }
     }
-  }, [busy, encodeClip])
+  }, [busy, encodeClip, mode])
 
   const retryClip = useCallback(
     async (itemId: string) => {
@@ -315,69 +417,137 @@ export function DroneClipsApp() {
           />
         </div>
 
+        {batchWarning ? (
+          <p className="mt-4 rounded-xl bg-amber-50 px-4 py-3 text-[14px] leading-snug text-amber-950" role="alert">
+            {batchWarning}
+          </p>
+        ) : null}
+
+        {batchSummary && !busy ? (
+          <p className="mt-4 rounded-xl bg-black/[0.06] px-4 py-3 text-[14px] font-bold text-black">
+            {batchSummary.failed === 0
+              ? `All done: ${batchSummary.done} of ${batchSummary.total}`
+              : `Done: ${batchSummary.done} of ${batchSummary.total}, ${batchSummary.failed} failed`}
+          </p>
+        ) : null}
+
         {items.length > 0 ? (
           <div className="mt-6 rounded-2xl bg-white p-4 shadow-sm">
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-[13px] font-bold uppercase tracking-[0.12em] text-black/40">
                 {items.length} clip{items.length === 1 ? '' : 's'}
               </p>
-              <button
-                type="button"
-                className="text-[13px] text-black/45 underline-offset-2 hover:text-black/70 hover:underline"
-                onClick={clearQueue}
-                disabled={busy}
-              >
-                Clear list
-              </button>
+              <div className="flex flex-wrap items-center gap-3">
+                {doneItems.length > 0 && !busy ? (
+                  <>
+                    <button
+                      type="button"
+                      className="text-[13px] text-black/45 underline-offset-2 hover:text-black/70 hover:underline"
+                      onClick={selectAllDone}
+                    >
+                      Select all
+                    </button>
+                    <button
+                      type="button"
+                      className="text-[13px] text-black/45 underline-offset-2 hover:text-black/70 hover:underline"
+                      onClick={selectNoneDone}
+                    >
+                      Select none
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-full bg-black px-4 py-2 text-[13px] font-bold text-white disabled:opacity-40"
+                      disabled={selectedDoneCount === 0}
+                      onClick={() => void downloadSelected()}
+                    >
+                      Download selected ({selectedDoneCount})
+                    </button>
+                  </>
+                ) : null}
+                <button
+                  type="button"
+                  className="text-[13px] text-black/45 underline-offset-2 hover:text-black/70 hover:underline"
+                  onClick={clearQueue}
+                  disabled={busy}
+                >
+                  Clear list
+                </button>
+              </div>
             </div>
             <ul className="mt-3 space-y-3">
               {items.map((item) => (
                 <li key={item.id} className="rounded-xl bg-black/[0.04] px-3 py-2.5">
-                  <p className="truncate text-[14px] font-bold text-black">{item.file.name}</p>
-                  <p className="text-[12px] text-black/50">
-                    {formatBytes(item.file.size)}
-                    {` → about ${formatBytes(estimateOutputBytes(item.file.size, mode))}`}
-                  </p>
-                  {item.status === 'compressing' ? (
-                    <div className="mt-2">
-                      <div className="h-2 overflow-hidden rounded-full bg-black/10">
-                        <div
-                          className="h-full rounded-full bg-black transition-[width] duration-300"
-                          style={{width: `${item.progress}%`}}
-                        />
-                      </div>
-                      <p className="mt-1 text-[12px] text-black/55">{item.progress}%</p>
-                    </div>
-                  ) : null}
-                  {item.message ? (
-                    <p className="mt-1 text-[12px] text-black/60">{item.message}</p>
-                  ) : null}
-                  {item.status === 'done' && item.canDownload ? (
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        className="rounded-full bg-black px-4 py-2 text-[13px] font-bold text-white disabled:opacity-40"
-                        onClick={() => {
-                          const saved = downloadBlobsRef.current.get(item.id)
-                          if (saved) triggerDownload(saved.blob, saved.fileName)
-                        }}
-                      >
-                        Download
-                      </button>
-                      {item.downloadFileName ? (
-                        <span className="text-[12px] text-black/55">{item.downloadFileName}</span>
+                  <div className="flex items-start gap-2">
+                    {item.status === 'done' && item.canDownload ? (
+                      <input
+                        type="checkbox"
+                        className="mt-1 h-4 w-4 shrink-0 accent-black"
+                        checked={selectedIds.has(item.id)}
+                        onChange={() => toggleSelected(item.id)}
+                        disabled={busy}
+                        aria-label={`Select ${item.file.name} for download`}
+                      />
+                    ) : (
+                      <span className="mt-1 inline-block h-4 w-4 shrink-0" aria-hidden />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[14px] font-bold text-black">{item.file.name}</p>
+                      <p className="text-[12px] text-black/50">
+                        {formatBytes(item.file.size)}
+                        {` → about ${formatBytes(estimateOutputBytes(item.file.size, mode))}`}
+                      </p>
+                      {item.status === 'compressing' ? (
+                        <div className="mt-2">
+                          <div className="h-2 overflow-hidden rounded-full bg-black/10">
+                            <div
+                              className="h-full rounded-full bg-black transition-[width] duration-300"
+                              style={{width: `${item.progress}%`}}
+                            />
+                          </div>
+                          <p className="mt-1 text-[12px] text-black/55">{item.progress}%</p>
+                        </div>
+                      ) : null}
+                      {item.message ? (
+                        <p className="mt-1 text-[12px] text-black/60">{item.message}</p>
+                      ) : null}
+                      {item.status === 'done' && item.canDownload ? (
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            className="rounded-full bg-black px-4 py-2 text-[13px] font-bold text-white disabled:opacity-40"
+                            onClick={() => {
+                              const saved = downloadBlobsRef.current.get(item.id)
+                              if (saved) triggerDownload(saved.blob, saved.fileName)
+                            }}
+                          >
+                            Download
+                          </button>
+                          {item.downloadFileName ? (
+                            <span className="text-[12px] text-black/55">{item.downloadFileName}</span>
+                          ) : null}
+                        </div>
+                      ) : null}
+                      {(item.status === 'error' || item.status === 'canceled') && !busy ? (
+                        <button
+                          type="button"
+                          className="mt-2 text-[13px] font-bold text-black underline underline-offset-2"
+                          onClick={() => void retryClip(item.id)}
+                        >
+                          Try again
+                        </button>
                       ) : null}
                     </div>
-                  ) : null}
-                  {(item.status === 'error' || item.status === 'canceled') && !busy ? (
-                    <button
-                      type="button"
-                      className="mt-2 text-[13px] font-bold text-black underline underline-offset-2"
-                      onClick={() => void retryClip(item.id)}
-                    >
-                      Try again
-                    </button>
-                  ) : null}
+                    {!busy ? (
+                      <button
+                        type="button"
+                        className="shrink-0 text-[12px] text-black/40 hover:text-black/70"
+                        onClick={() => removeClip(item.id)}
+                        aria-label={`Remove ${item.file.name}`}
+                      >
+                        Remove
+                      </button>
+                    ) : null}
+                  </div>
                 </li>
               ))}
             </ul>
@@ -488,8 +658,8 @@ export function DroneClipsApp() {
         ) : null}
 
         <p className="mt-10 text-[12px] leading-snug text-black/45">
-          Clips are compressed one at a time, then saved to your Downloads folder. You can add several clips and press
-          Compress once — each file downloads when it is ready.
+          Clips compress one at a time and stay in memory until you download or clear the list. Nothing is written to
+          disk until you choose Download.
         </p>
       </div>
     </div>
