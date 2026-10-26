@@ -1,5 +1,6 @@
 import {ALL_FORMATS, BlobSource, Input} from 'mediabunny'
 
+import {gatherClipMediaFacts, shouldKeepOriginalFromFacts, type ClipMediaFacts} from './keep-original'
 import type {CompressMode} from './modes'
 import {estimateOutputBytes, fitDimensions} from './modes'
 
@@ -11,6 +12,7 @@ export type FileProbe = {
   estimatedOutputBytes: number
   outputWidth: number | null
   outputHeight: number | null
+  mediaFacts: ClipMediaFacts | null
 }
 
 export async function probeVideoFile(file: File, mode: CompressMode): Promise<FileProbe> {
@@ -37,6 +39,8 @@ export async function probeVideoFile(file: File, mode: CompressMode): Promise<Fi
     let outputWidth: number | null = null
     let outputHeight: number | null = null
 
+    const mediaFacts = await gatherClipMediaFacts(input, file)
+
     if (video) {
       displayWidth = await video.getDisplayWidth()
       displayHeight = await video.getDisplayHeight()
@@ -45,14 +49,17 @@ export async function probeVideoFile(file: File, mode: CompressMode): Promise<Fi
       outputHeight = fitted.height
     }
 
+    const keepOriginal = mediaFacts ? shouldKeepOriginalFromFacts(mediaFacts, mode) : false
+
     return {
       durationSec,
       displayWidth,
       displayHeight,
       hasAudio: audioTracks.length > 0,
-      estimatedOutputBytes: estimateOutputBytes(file.size, mode),
+      estimatedOutputBytes: keepOriginal ? file.size : estimateOutputBytes(file.size, mode),
       outputWidth,
       outputHeight,
+      mediaFacts,
     }
   } finally {
     input.dispose()

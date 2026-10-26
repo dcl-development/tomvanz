@@ -12,6 +12,7 @@ import {
 } from 'mediabunny'
 
 import {formatBytes, outputFileName} from './format'
+import {shouldKeepOriginal} from './keep-original'
 import {audioQuality, type CompressMode, fitDimensions, videoQuality} from './modes'
 
 let aacEncoderReady = false
@@ -33,6 +34,7 @@ export type EncodeProgress = {
 export type EncodeResult = {
   fileName: string
   blob: Blob
+  keptOriginal: boolean
 }
 
 /** Max estimated compressed size for one clip encode. */
@@ -73,100 +75,114 @@ function blobFromBufferTarget(target: BufferTarget): Blob {
   return blob
 }
 
+function keptOriginalResult(file: File): EncodeResult {
+  return {fileName: file.name, blob: file, keptOriginal: true}
+}
+
 export async function compressVideoFile(
   file: File,
   mode: CompressMode,
   onProgress: (progress: EncodeProgress) => void,
   signal?: AbortSignal,
 ): Promise<EncodeResult> {
-  await ensureAacEncoder()
-
-  const suggestedName = outputFileName(file.name)
-  const target = new BufferTarget()
-  const output = new Output({
-    format: new Mp4OutputFormat(),
-    target,
-  })
-
   const input = new Input({
     source: new BlobSource(file),
     formats: ALL_FORMATS,
   })
 
-  let conversion: Conversion | null = null
-
   try {
-    conversion = await Conversion.init({
-      input,
-      output,
-      tracks: 'primary',
-      copy: false,
-      video: async (track) => {
-        const srcW = await track.getDisplayWidth()
-        const srcH = await track.getDisplayHeight()
-        const {width, height} = fitDimensions(srcW, srcH, mode)
-        let frameRate: number | undefined
-        if (mode.maxFrameRate) {
-          try {
-            const metrics = await track.computeFrameRateMetrics()
-            const sourceRate = metrics.bestGuessFrameRate
-            frameRate = Math.min(sourceRate, mode.maxFrameRate)
-          } catch {
-            frameRate = mode.maxFrameRate
-          }
-        }
-        return {
-          codec: 'avc',
-          width,
-          height,
-          fit: 'contain',
-          frameRate,
-          quality: videoQuality(mode),
-          forceTranscode: true,
-        }
-      },
-      audio: {
-        codec: 'aac',
-        quality: audioQuality(mode),
-        forceTranscode: true,
-      },
+    if (await shouldKeepOriginal(input, file, mode)) {
+      onProgress({progress: 1, processedSeconds: 0, bytesWritten: file.size})
+      return keptOriginalResult(file)
+    }
+
+    await ensureAacEncoder()
+
+    const suggestedName = outputFileName(file.name)
+    const target = new BufferTarget()
+    const output = new Output({
+      format: new Mp4OutputFormat(),
+      target,
     })
 
-    if (!conversion.isValid) {
-      const reason = conversion.discardedTracks[0]?.reason ?? 'unknown'
-      throw new Error(`Could not process this video (${reason}).`)
-    }
-
-    conversion.onProgress = (progress, processedSeconds) => {
-      onProgress({
-        progress,
-        processedSeconds,
-        bytesWritten: 0,
-      })
-    }
-
-    const abortHandler = () => {
-      void conversion?.cancel()
-    }
-    signal?.addEventListener('abort', abortHandler, {once: true})
+    let conversion: Conversion | null = null
 
     try {
-      await conversion.execute({pauseSignal: signal})
-    } catch (error) {
-      if (error instanceof ConversionCanceledError || signal?.aborted) {
-        throw new Error('Canceled')
-      }
-      throw error
-    } finally {
-      signal?.removeEventListener('abort', abortHandler)
-    }
+      conversion = await Conversion.init({
+        input,
+        output,
+        tracks: 'primary',
+        copy: false,
+        video: async (track) => {
+          const srcW = await track.getDisplayWidth()
+          const srcH = await track.getDisplayHeight()
+          const {width, height} = fitDimensions(srcW, srcH, mode)
+          let frameRate: number | undefined
+          if (mode.maxFrameRate) {
+            try {
+              const metrics = await track.computeFrameRateMetrics()
+              const sourceRate = metrics.bestGuessFrameRate
+              frameRate = Math.min(sourceRate, mode.maxFrameRate)
+            } catch {
+              frameRate = mode.maxFrameRate
+            }
+          }
+          return {
+            codec: 'avc',
+            width,
+            height,
+            fit: 'contain',
+            frameRate,
+            quality: videoQuality(mode),
+            forceTranscode: true,
+          }
+        },
+        audio: {
+          codec: 'aac',
+          quality: audioQuality(mode),
+          forceTranscode: true,
+        },
+      })
 
-    await output.finalize()
-    const blob = blobFromBufferTarget(target)
-    return {fileName: suggestedName, blob}
-  } catch (error) {
-    void conversion?.cancel()
-    throw error
+      if (!conversion.isValid) {
+        const reason = conversion.discardedTracks[0]?.reason ?? 'unknown'
+        throw new Error(`Could not process this video (${reason}).`)
+      }
+
+      conversion.onProgress = (progress, processedSeconds) => {
+        onProgress({
+          progress,
+          processedSeconds,
+          bytesWritten: 0,
+        })
+      }
+
+      const abortHandler = () => {
+        void conversion?.cancel()
+      }
+      signal?.addEventListener('abort', abortHandler, {once: true})
+
+      try {
+        await conversion.execute({pauseSignal: signal})
+      } catch (error) {
+        if (error instanceof ConversionCanceledError || signal?.aborted) {
+          throw new Error('Canceled')
+        }
+        throw error
+      } finally {
+        signal?.removeEventListener('abort', abortHandler)
+      }
+
+      await output.finalize()
+      const blob = blobFromBufferTarget(target)
+      if (blob.size >= file.size) {
+        return keptOriginalResult(file)
+      }
+      return {fileName: suggestedName, blob, keptOriginal: false}
+    } catch (error) {
+      void conversion?.cancel()
+      throw error
+    }
   } finally {
     input.dispose()
   }
