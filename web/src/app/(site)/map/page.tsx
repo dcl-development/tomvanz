@@ -16,7 +16,7 @@ const empty: MapData = {
   pins: [],
 }
 
-export default async function Home() {
+export default async function MapPage() {
   const data = (await client.fetch(mapQuery)) ?? empty
   return <MapApp data={data} />
 }
