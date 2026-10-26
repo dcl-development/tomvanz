@@ -1,6 +1,6 @@
 'use client'
 
-export default function ErrorState({
+export default function MapError({
   reset,
 }: {
   error: Error & {digest?: string}

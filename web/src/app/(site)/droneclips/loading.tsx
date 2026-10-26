@@ -1,7 +1,7 @@
-export default function Loading() {
+export default function DroneClipsLoading() {
   return (
     <div className="flex h-full items-center justify-center bg-[#e8e8e8] text-[14px] text-black/50">
-      Loading map
+      Loading clip tool
     </div>
   )
 }

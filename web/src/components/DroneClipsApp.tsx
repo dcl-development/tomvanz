@@ -48,24 +48,22 @@ function triggerDownload(url: string, fileName: string) {
   a.remove()
 }
 
-function readSupport(): WebCodecsSupport | null {
-  if (typeof window === 'undefined') return null
+const SUPPORT_OK: WebCodecsSupport = {supported: true, reason: null}
+const SUPPORT_MISSING: WebCodecsSupport = {
+  supported: false,
+  reason:
+    'This browser cannot compress video here. Try the latest Chrome, Edge, or Safari on a laptop or desktop.',
+}
+
+function readSupport(): WebCodecsSupport {
   if (typeof VideoEncoder === 'undefined' || typeof VideoDecoder === 'undefined') {
-    return {
-      supported: false,
-      reason:
-        'This browser cannot compress video here. Try the latest Chrome, Edge, or Safari on a laptop or desktop.',
-    }
+    return SUPPORT_MISSING
   }
-  return {supported: true, reason: null}
+  return SUPPORT_OK
 }
 
 export function DroneClipsApp() {
-  const support = useSyncExternalStore(
-    () => () => {},
-    readSupport,
-    (): WebCodecsSupport | null => null,
-  )
+  const support = useSyncExternalStore(() => () => {}, readSupport, () => SUPPORT_OK)
   const [modeId, setModeId] = useState<CompressModeId>(DEFAULT_MODE_ID)
   const [items, setItems] = useState<QueueItem[]>([])
   const [busy, setBusy] = useState(false)
@@ -266,14 +264,6 @@ export function DroneClipsApp() {
   const hasBlobDownloads = items.some((item) => item.result?.kind === 'blob' && item.downloadUrl)
   const canCompress = support?.supported && items.length > 0 && !busy
 
-  if (support === null) {
-    return (
-      <div className="flex h-full items-center justify-center bg-[#e8e8e8] p-6 text-[15px] text-black/60">
-        Checking your browser…
-      </div>
-    )
-  }
-
   if (!support.supported) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-4 bg-[#e8e8e8] p-6 text-center">
@@ -376,11 +366,18 @@ export function DroneClipsApp() {
         ) : null}
 
         <fieldset className="mt-8 border-0 p-0" disabled={busy}>
-          <legend className="text-[13px] font-bold uppercase tracking-[0.12em] text-black/40">
+          <legend
+            id="compress-mode-legend"
+            className="text-[13px] font-bold uppercase tracking-[0.12em] text-black/40"
+          >
             How should we shrink them?
           </legend>
-          <div className="mt-3 space-y-3">
-            {COMPRESS_MODES.map((option) => {
+          <div
+            role="radiogroup"
+            aria-labelledby="compress-mode-legend"
+            className="mt-3 rounded-2xl border-2 border-black/12 bg-white p-2 shadow-sm"
+          >
+            {COMPRESS_MODES.map((option, index) => {
               const selected = option.id === modeId
               const est = estimateOutputBytes(totalInputBytes || 0, option)
               const estLabel =
@@ -388,33 +385,55 @@ export function DroneClipsApp() {
                   ? `About ${formatBytes(est)} total`
                   : 'Add clips to see an estimated size'
               return (
-                <div key={option.id}>
+                <div key={option.id} className={index > 0 ? 'mt-2 border-t border-black/8 pt-2' : ''}>
                   <button
                     type="button"
+                    role="radio"
+                    aria-checked={selected}
                     onClick={() => setModeId(option.id)}
-                    className={`w-full rounded-2xl border-2 px-4 py-4 text-left transition-colors ${
+                    className={`w-full cursor-pointer rounded-xl px-3.5 py-3.5 text-left transition-[background-color,border-color,box-shadow,transform] active:scale-[0.99] sm:px-4 sm:py-4 ${
                       selected
-                        ? 'border-black bg-black text-white'
-                        : 'border-black/10 bg-white text-black hover:border-black/25'
+                        ? 'border-2 border-black bg-black text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]'
+                        : 'border-2 border-black/15 bg-white text-black hover:border-black/35 hover:bg-black/[0.02]'
                     }`}
                   >
-                    <span className="block text-[17px] font-bold">{option.label}</span>
+                    <span className="flex items-center gap-2">
+                      <span
+                        aria-hidden
+                        className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 ${
+                          selected
+                            ? 'border-white bg-white'
+                            : 'border-black/30 bg-transparent'
+                        }`}
+                      >
+                        {selected ? <span className="h-2 w-2 rounded-full bg-black" /> : null}
+                      </span>
+                      <span className="text-[17px] font-bold leading-tight">{option.label}</span>
+                    </span>
                     <span
-                      className={`mt-1 block text-[14px] leading-snug ${
+                      className={`mt-1.5 block pl-6 text-[14px] leading-snug sm:pl-6 ${
                         selected ? 'text-white/85' : 'text-black/60'
                       }`}
                     >
                       {option.description}
                     </span>
                     <span
-                      className={`mt-2 block text-[13px] font-bold ${
+                      className={`mt-2 block pl-6 text-[13px] font-bold sm:pl-6 ${
                         selected ? 'text-white/90' : 'text-black/70'
                       }`}
                     >
                       {estLabel}
                     </span>
+                    <p
+                      className={`mt-2.5 border-t pt-2.5 pl-6 text-[12px] leading-snug sm:pl-6 ${
+                        selected
+                          ? 'border-white/20 text-white/70'
+                          : 'border-black/8 text-black/50'
+                      }`}
+                    >
+                      {option.finePrint}
+                    </p>
                   </button>
-                  <p className="mt-2 px-1 text-[12px] leading-snug text-black/50">{option.finePrint}</p>
                 </div>
               )
             })}

@@ -1,6 +1,6 @@
 import type {Metadata} from 'next'
 
-import {DroneClipsApp} from '@/components/DroneClipsApp'
+import {DroneClipsPageClient} from '@/components/DroneClipsPageClient'
 
 export const metadata: Metadata = {
   title: 'Drone Clips · Tom Vanz',
@@ -8,5 +8,5 @@ export const metadata: Metadata = {
 }
 
 export default function DroneClipsPage() {
-  return <DroneClipsApp />
+  return <DroneClipsPageClient />
 }

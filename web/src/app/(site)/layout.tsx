@@ -3,7 +3,7 @@ import {SiteHeader} from '@/components/SiteHeader'
 
 export const dynamic = 'force-dynamic'
 
-export default async function SiteLayout({children}: LayoutProps<'/'>) {
+export default async function SiteLayout({children}: {children: React.ReactNode}) {
   const name =
     (await client.fetch<string | null>('coalesce(*[_type == "siteSettings"][0].name, "Tom Vanz")')) ??
     'Tom Vanz'
