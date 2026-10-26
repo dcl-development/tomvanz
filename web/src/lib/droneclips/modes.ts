@@ -54,12 +54,19 @@ export function getMode(id: CompressModeId): CompressMode {
   return mode
 }
 
+export function modeTargetBitrateBps(mode: CompressMode): number {
+  return mode.videoBitrate + mode.audioBitrate
+}
+
 export function fitDimensions(
   sourceWidth: number,
   sourceHeight: number,
   mode: CompressMode,
 ): {width: number; height: number} {
-  const scale = Math.min(1, mode.maxWidth / sourceWidth, mode.maxHeight / sourceHeight)
+  const portrait = sourceHeight > sourceWidth
+  const maxW = portrait ? mode.maxHeight : mode.maxWidth
+  const maxH = portrait ? mode.maxWidth : mode.maxHeight
+  const scale = Math.min(1, maxW / sourceWidth, maxH / sourceHeight)
   let width = Math.floor(sourceWidth * scale)
   let height = Math.floor(sourceHeight * scale)
   width = Math.max(2, width & ~1)

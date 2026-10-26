@@ -9,6 +9,7 @@ import {
   type EncodeResult,
 } from '@/lib/droneclips/encode'
 import {formatBytes} from '@/lib/droneclips/format'
+import {shouldKeepOriginalFromFacts} from '@/lib/droneclips/keep-original'
 import {
   COMPRESS_MODES,
   DEFAULT_MODE_ID,
@@ -38,7 +39,17 @@ type QueueItem = {
   message: string | null
   downloadFileName: string | null
   canDownload: boolean
+  keptOriginal: boolean
 }
+
+function estimatedBytesForItem(file: File, probe: FileProbe | null, mode: ReturnType<typeof getMode>): number {
+  if (probe?.mediaFacts && shouldKeepOriginalFromFacts(probe.mediaFacts, mode)) {
+    return file.size
+  }
+  return probe?.estimatedOutputBytes ?? estimateOutputBytes(file.size, mode)
+}
+
+const KEPT_ORIGINAL_MESSAGE = 'Already compressed, kept original'
 
 type BatchSummary = {
   done: number
@@ -101,8 +112,8 @@ export function DroneClipsApp() {
   )
 
   const estimatedTotalOutput = useMemo(
-    () => estimateOutputBytes(totalInputBytes, mode),
-    [totalInputBytes, mode],
+    () => items.reduce((sum, item) => sum + estimatedBytesForItem(item.file, item.probe, mode), 0),
+    [items, mode],
   )
 
   const hasPendingClips = useMemo(() => items.some((item) => item.status !== 'done'), [items])
@@ -135,6 +146,7 @@ export function DroneClipsApp() {
             estimatedOutputBytes: estimateOutputBytes(file.size, probeMode),
             outputWidth: null,
             outputHeight: null,
+            mediaFacts: null,
           },
           probeError: null,
         })
@@ -142,6 +154,18 @@ export function DroneClipsApp() {
     },
     [mode, updateItem],
   )
+
+  const modeIdRef = useRef(modeId)
+  useEffect(() => {
+    if (modeIdRef.current === modeId) return
+    modeIdRef.current = modeId
+    if (busy) return
+    const nextMode = getMode(modeId)
+    for (const item of itemsRef.current) {
+      if (item.status === 'compressing') continue
+      void probeItem(item.id, item.file, nextMode)
+    }
+  }, [modeId, busy, probeItem])
 
   const addFiles = useCallback(
     (fileList: FileList | File[]) => {
@@ -159,6 +183,7 @@ export function DroneClipsApp() {
         message: null,
         downloadFileName: null,
         canDownload: false,
+        keptOriginal: false,
       }))
       setItems((prev) => [...prev, ...next])
       for (const item of next) {
@@ -235,7 +260,7 @@ export function DroneClipsApp() {
       const item = itemsRef.current.find((entry) => entry.id === itemId)
       if (!item || item.status === 'done') return 'skipped' as const
 
-      const estimated = estimateOutputBytes(item.file.size, mode)
+      const estimated = estimatedBytesForItem(item.file, item.probe, mode)
       const sizeCheck = checkEstimatedOutputSize(estimated)
       if (!sizeCheck.ok) {
         updateItem(itemId, {
@@ -254,6 +279,7 @@ export function DroneClipsApp() {
         message: null,
         downloadFileName: null,
         canDownload: false,
+        keptOriginal: false,
       })
 
       try {
@@ -268,12 +294,16 @@ export function DroneClipsApp() {
 
         downloadBlobsRef.current.set(itemId, result)
         setSelectedIds((prev) => new Set(prev).add(itemId))
+        const keptMessage = result.keptOriginal
+          ? `${KEPT_ORIGINAL_MESSAGE} (${formatBytes(item.file.size)})`
+          : 'Ready — use Download when you want a copy on disk.'
         updateItem(itemId, {
           status: 'done',
           progress: 100,
           downloadFileName: result.fileName,
           canDownload: true,
-          message: 'Ready — use Download when you want a copy on disk.',
+          keptOriginal: result.keptOriginal,
+          message: keptMessage,
         })
         return 'done' as const
       } catch (error) {
@@ -298,10 +328,10 @@ export function DroneClipsApp() {
       .filter((item) => item.status === 'done')
       .reduce((sum, item) => {
         const blob = downloadBlobsRef.current.get(item.id)?.blob
-        return sum + (blob?.size ?? estimateOutputBytes(item.file.size, mode))
+        return sum + (blob?.size ?? estimatedBytesForItem(item.file, item.probe, mode))
       }, 0)
     const pendingEstimate = queue.reduce(
-      (sum, item) => sum + estimateOutputBytes(item.file.size, mode),
+      (sum, item) => sum + estimatedBytesForItem(item.file, item.probe, mode),
       0,
     )
     const batchCheck = checkBatchEstimatedOutputSize(doneBytes + pendingEstimate)
@@ -494,7 +524,9 @@ export function DroneClipsApp() {
                       <p className="truncate text-[14px] font-bold text-black">{item.file.name}</p>
                       <p className="text-[12px] text-black/50">
                         {formatBytes(item.file.size)}
-                        {` → about ${formatBytes(estimateOutputBytes(item.file.size, mode))}`}
+                        {item.status === 'done' && item.keptOriginal
+                          ? ` — ${KEPT_ORIGINAL_MESSAGE}`
+                          : ` → about ${formatBytes(estimatedBytesForItem(item.file, item.probe, mode))}`}
                       </p>
                       {item.status === 'compressing' ? (
                         <div className="mt-2">

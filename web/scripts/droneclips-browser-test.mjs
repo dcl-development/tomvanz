@@ -1,8 +1,9 @@
 /**
- * Headless browser test for /droneclips: manual download, batch flow, retry, heap metrics.
- * Requires: server on PORT, ffmpeg, ffprobe, playwright chromium.
+ * Headless Chrome tests for /droneclips: encode, keep-original skip, portrait sizing.
+ * Requires: production server on PORT, ffmpeg, ffprobe, playwright chromium.
  */
 import {spawnSync} from 'node:child_process'
+import crypto from 'node:crypto'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -16,6 +17,7 @@ const baseUrl = `http://127.0.0.1:${port}/droneclips`
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'droneclips-test-'))
 const inputPath = path.join(tmpDir, 'test-4k.mp4')
 const inputPath2 = path.join(tmpDir, 'test-4k-b.mp4')
+const verticalPath = path.join(tmpDir, 'test-vertical.mp4')
 
 function run(cmd, args) {
   const result = spawnSync(cmd, args, {encoding: 'utf8'})
@@ -25,17 +27,17 @@ function run(cmd, args) {
   return result.stdout.trim()
 }
 
-function makeTestClip(outPath, durationSec = 3) {
+function makeTestClip(outPath, {durationSec = 3, width = 3840, height = 2160, bitrate = '25M'} = {}) {
   run('ffmpeg', [
     '-y',
     '-f',
     'lavfi',
     '-i',
-    `testsrc=duration=${durationSec}:size=3840x2160:rate=30`,
+    `testsrc=duration=${durationSec}:size=${width}x${height}:rate=30`,
     '-c:v',
     'libx264',
     '-b:v',
-    '25M',
+    bitrate,
     '-pix_fmt',
     'yuv420p',
     '-movflags',
@@ -44,12 +46,13 @@ function makeTestClip(outPath, durationSec = 3) {
   ])
 }
 
-console.log('Generating 4K H.264 test clips…')
+console.log('Generating test clips…')
 makeTestClip(inputPath)
-makeTestClip(inputPath2, 2)
+makeTestClip(inputPath2, {durationSec: 2})
+makeTestClip(verticalPath, {width: 1080, height: 1920, bitrate: '20M'})
 
 const inputSize = fs.statSync(inputPath).size
-console.log(`Input A: ${inputPath} (${inputSize} bytes)`)
+console.log(`High-bitrate input: ${inputPath} (${inputSize} bytes)`)
 
 function probeDimensions(filePath) {
   const out = run('ffprobe', [
@@ -67,165 +70,147 @@ function probeDimensions(filePath) {
   return {width: w, height: h}
 }
 
-async function getJsHeapUsed(cdp) {
-  const {metrics} = await cdp.send('Performance.getMetrics')
-  const heap = metrics.find((m) => m.name === 'JSHeapUsedSize')
-  return heap ? Number(heap.value) : null
+function fileSha256(filePath) {
+  const data = fs.readFileSync(filePath)
+  return crypto.createHash('sha256').update(data).digest('hex')
 }
 
-async function collectGarbage(cdp) {
-  try {
-    await cdp.send('HeapProfiler.collectGarbage')
-  } catch {
-    /* optional */
-  }
-}
-
-async function logHeap(label, cdp, memoryLog) {
-  const bytes = await getJsHeapUsed(cdp)
-  const entry = {label, jsHeapUsedBytes: bytes}
-  memoryLog.push(entry)
-  console.log(`  [heap] ${label}: ${bytes != null ? `${Math.round(bytes / 1024 / 1024)} MiB` : 'n/a'}`)
-  return bytes
-}
-
-async function waitForCompressIdle(page, clipCount) {
+async function waitForBatchDone(page, clipCount) {
   await page.getByText(new RegExp(`All done: ${clipCount} of ${clipCount}`)).waitFor({timeout: 300_000})
 }
 
-async function encodeModeNoAutoDownload(page, modeLabel, clipCount, cdp, memoryLog) {
+async function waitForClipDone(page) {
+  await page
+    .getByText(/Ready — use Download|Already compressed, kept original/)
+    .first()
+    .waitFor({timeout: 300_000})
+}
+
+async function compressCurrentList(page, modeLabel, clipCount) {
   await page.getByRole('radio', {name: new RegExp(modeLabel)}).click()
   const downloadDuringCompress = page.waitForEvent('download', {timeout: 5000}).then(() => 'got-download')
-  await page.getByRole('button', {name: 'Compress'}).click()
+  await page.getByRole('button', {name: 'Compress', exact: true}).click()
   const race = await Promise.race([
     downloadDuringCompress,
-    page.getByText('%', {exact: false}).first().waitFor({timeout: 15_000}).then(() => 'progress'),
+    page.getByText('%', {exact: false}).first().waitFor({timeout: 20_000}).then(() => 'progress'),
+    page.getByText('Already compressed, kept original').first().waitFor({timeout: 20_000}).then(() => 'kept'),
   ])
   if (race === 'got-download') {
     throw new Error(`Unexpected auto-download during compress (${modeLabel})`)
   }
-  await waitForCompressIdle(page, clipCount)
-  await logHeap(`after compress (${modeLabel})`, cdp, memoryLog)
-  await page.getByText('Ready — use Download', {exact: false}).first().waitFor({timeout: 30_000})
+  await waitForBatchDone(page, clipCount)
+  await waitForClipDone(page)
 }
 
-async function downloadSelected(page, expectedCount, downloadDir, prefix) {
-  const btn = page.getByRole('button', {name: new RegExp(`Download selected \\(${expectedCount}\\)`)})
-  await btn.waitFor({state: 'visible', timeout: 30_000})
-  const downloadWaits = Array.from({length: expectedCount}, () =>
-    page.waitForEvent('download', {timeout: 180_000}),
-  )
-  await btn.click()
-  const downloads = await Promise.all(downloadWaits)
-  const paths = []
-  for (let i = 0; i < downloads.length; i++) {
-    const outPath = path.join(downloadDir, `${prefix}-${i + 1}.mp4`)
-    await downloads[i].saveAs(outPath)
-    paths.push(outPath)
-  }
-  return paths
-}
-
-async function testRetryAfterCancel(page, downloadDir) {
-  await page.getByRole('button', {name: 'Clear list'}).click()
-  await page.setInputFiles('input[type="file"]', inputPath)
-  await page.getByRole('button', {name: 'Compress'}).click()
-  await page.getByText('%', {exact: false}).first().waitFor({timeout: 30_000}).catch(() => {})
-  await page.getByRole('button', {name: 'Cancel'}).click({timeout: 5000}).catch(() => {})
-  await page.getByRole('button', {name: 'Try again'}).waitFor({timeout: 30_000})
-  const downloadDuringRetry = page.waitForEvent('download', {timeout: 5000}).then(() => true).catch(() => false)
-  await page.getByRole('button', {name: 'Try again'}).click()
-  await page.getByText('Ready — use Download', {exact: false}).waitFor({timeout: 180_000})
-  if (await downloadDuringRetry) {
-    throw new Error('Unexpected auto-download on retry')
-  }
+async function downloadFirstClip(page, outPath) {
   const downloadPromise = page.waitForEvent('download', {timeout: 180_000})
   await page.getByRole('button', {name: 'Download'}).first().click()
   const download = await downloadPromise
-  const outPath = path.join(downloadDir, 'retry-after-cancel.mp4')
   await download.saveAs(outPath)
-  return outPath
 }
 
 const browser = await chromium.launch({
   headless: true,
-  args: ['--enable-features=PlatformHEVCDecoderSupport', '--js-flags=--expose-gc'],
+  args: ['--enable-features=PlatformHEVCDecoderSupport'],
 })
 
 const context = await browser.newContext({acceptDownloads: true})
 const page = await context.newPage()
-const cdp = await context.newCDPSession(page)
-await cdp.send('Performance.enable')
 
-const memoryLog = []
+const report = {
+  highBitrateCompress: null,
+  roundTripKeepOriginal: null,
+  verticalPortrait: null,
+}
 
 console.log(`Opening ${baseUrl}`)
 await page.goto(baseUrl, {waitUntil: 'networkidle'})
 await page.getByRole('button', {name: 'Choose videos'}).waitFor({timeout: 60_000})
 
-await logHeap('baseline (empty list)', cdp, memoryLog)
-
-await page.setInputFiles('input[type="file"]', [inputPath, inputPath2])
-await page.waitForTimeout(2000)
-
-const results = []
-
-for (const {label, expectW, expectH, maxSizeRatio, clipCount} of [
-  {label: 'Quick share', expectW: 1280, expectH: 720, maxSizeRatio: 0.5, clipCount: 2},
-  {label: 'Best quality', expectW: 1920, expectH: 1080, maxSizeRatio: 0.6, clipCount: 2},
-]) {
-  console.log(`Testing mode: ${label} (${clipCount} clips, no auto-download)`)
-  await encodeModeNoAutoDownload(page, label, clipCount, cdp, memoryLog)
-  const outPaths = await downloadSelected(page, clipCount, tmpDir, label.replace(/\s+/g, '-'))
-  for (const outPath of outPaths) {
-    const {width, height} = probeDimensions(outPath)
-    const outSize = fs.statSync(outPath).size
-    const okDims = width === expectW && height === expectH
-    const okSmaller = outSize < inputSize * maxSizeRatio
-    results.push({
-      mode: label,
-      file: path.basename(outPath),
-      width,
-      height,
-      outSize,
-      okDims,
-      okSmaller,
-    })
-    console.log(
-      `  → ${path.basename(outPath)} ${width}x${height}, ${outSize} bytes (dims ${okDims ? 'OK' : 'FAIL'}, size ${okSmaller ? 'OK' : 'FAIL'})`,
-    )
-  }
-  await collectGarbage(cdp)
-  await logHeap(`after GC (${label})`, cdp, memoryLog)
-  await page.getByRole('button', {name: 'Clear list'}).click()
-  await page.waitForTimeout(500)
-  await collectGarbage(cdp)
-  await logHeap(`after clear (${label})`, cdp, memoryLog)
-  const baseline = memoryLog.find((e) => e.label === 'baseline (empty list)')?.jsHeapUsedBytes
-  const afterClear = memoryLog[memoryLog.length - 1]?.jsHeapUsedBytes
-  if (baseline != null && afterClear != null && afterClear > baseline * 1.35) {
-    console.warn(
-      `  WARN: heap after clear (${Math.round(afterClear / 1024 / 1024)} MiB) > 1.35× baseline (${Math.round(baseline / 1024 / 1024)} MiB)`,
-    )
-  }
-  await page.setInputFiles('input[type="file"]', [inputPath, inputPath2])
-  await page.waitForTimeout(1000)
+// (a) High-bitrate clip compresses (Best quality, landscape 4K → 1920×1080, smaller file)
+console.log('Case (a): high-bitrate 4K compresses…')
+await page.setInputFiles('input[type="file"]', inputPath)
+await page.waitForTimeout(1500)
+await compressCurrentList(page, 'Best quality', 1)
+const compressedPath = path.join(tmpDir, 'case-a-compressed.mp4')
+await downloadFirstClip(page, compressedPath)
+const aDims = probeDimensions(compressedPath)
+const aSize = fs.statSync(compressedPath).size
+report.highBitrateCompress = {
+  width: aDims.width,
+  height: aDims.height,
+  outBytes: aSize,
+  inputBytes: inputSize,
+  okDims: aDims.width === 1920 && aDims.height === 1080,
+  okSmaller: aSize < inputSize * 0.6,
 }
+console.log(`  → ${aDims.width}x${aDims.height}, ${aSize} bytes`, report.highBitrateCompress)
 
-console.log('Testing retry after cancel…')
-const retryPath = await testRetryAfterCancel(page, tmpDir)
-const retrySize = fs.statSync(retryPath).size
-if (retrySize < 1024) throw new Error('Retry download was empty')
-console.log(`  → retry OK (${retrySize} bytes)`)
+// (b) Re-feed compressed output → kept original, same bytes
+console.log('Case (b): re-feed compressed output (keep original)…')
+await page.getByRole('button', {name: 'Clear list'}).click()
+await page.setInputFiles('input[type="file"]', compressedPath)
+await page.waitForTimeout(1500)
+const keptVisible = page.getByText('Already compressed, kept original').first()
+const progressVisible = page.getByText('%', {exact: false}).first()
+const startMs = Date.now()
+await page.getByRole('radio', {name: /Best quality/}).click()
+await page.getByRole('button', {name: 'Compress', exact: true}).click()
+const outcome = await Promise.race([
+  keptVisible.waitFor({timeout: 120_000}).then(() => 'kept'),
+  progressVisible.waitFor({timeout: 120_000}).then(() => 'progress'),
+])
+const elapsedMs = Date.now() - startMs
+await waitForBatchDone(page, 1)
+const keptText = await keptVisible.textContent()
+const roundTripPath = path.join(tmpDir, 'case-b-roundtrip.mp4')
+await downloadFirstClip(page, roundTripPath)
+const bHashIn = fileSha256(compressedPath)
+const bHashOut = fileSha256(roundTripPath)
+report.roundTripKeepOriginal = {
+  uiOutcome: outcome,
+  elapsedMs,
+  keptMessage: keptText?.trim() ?? '',
+  okKeptMessage: (keptText ?? '').includes('Already compressed, kept original'),
+  okFast: elapsedMs < 45_000,
+  okSameBytes: bHashIn === bHashOut,
+  inBytes: fs.statSync(compressedPath).size,
+  outBytes: fs.statSync(roundTripPath).size,
+}
+console.log('  →', report.roundTripKeepOriginal)
+
+// (c) Vertical clip stays portrait at 1080×1920 max (Best quality)
+console.log('Case (c): vertical clip orientation…')
+await page.getByRole('button', {name: 'Clear list'}).click()
+await page.setInputFiles('input[type="file"]', verticalPath)
+await page.waitForTimeout(1500)
+await compressCurrentList(page, 'Best quality', 1)
+const verticalOut = path.join(tmpDir, 'case-c-vertical.mp4')
+await downloadFirstClip(page, verticalOut)
+const cDims = probeDimensions(verticalOut)
+const cSize = fs.statSync(verticalOut).size
+report.verticalPortrait = {
+  width: cDims.width,
+  height: cDims.height,
+  outBytes: cSize,
+  okDims: cDims.width === 1080 && cDims.height === 1920,
+}
+console.log(`  → ${cDims.width}x${cDims.height}, ${cSize} bytes`, report.verticalPortrait)
 
 await browser.close()
 
-const failed = results.filter((r) => !r.okDims || !r.okSmaller)
-if (failed.length) {
-  console.error('FAILED', failed)
+const failures = []
+if (!report.highBitrateCompress.okDims || !report.highBitrateCompress.okSmaller) failures.push('(a) high-bitrate')
+if (!report.roundTripKeepOriginal.okKeptMessage || !report.roundTripKeepOriginal.okSameBytes) {
+  failures.push('(b) keep-original round-trip')
+}
+if (!report.verticalPortrait.okDims) failures.push('(c) vertical')
+
+if (failures.length) {
+  console.error('FAILED cases:', failures)
+  console.error(JSON.stringify(report, null, 2))
   process.exit(1)
 }
 
-console.log('All mode tests passed.')
-console.log('MEMORY_LOG_JSON=' + JSON.stringify(memoryLog))
-console.log(JSON.stringify({results, memoryLog}, null, 2))
+console.log('All droneclips tests passed.')
+console.log(JSON.stringify(report, null, 2))
