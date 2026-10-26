@@ -5,7 +5,7 @@ import Link from 'next/link'
 import {usePathname} from 'next/navigation'
 
 const links = [
-  {href: '/', label: 'Map'},
+  {href: '/map', label: 'Map'},
   {href: '/droneclips', label: 'Drone Clips'},
 ]
 
