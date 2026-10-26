@@ -4,7 +4,10 @@ import Image from 'next/image'
 import Link from 'next/link'
 import {usePathname} from 'next/navigation'
 
-const links = [{href: '/', label: 'Map'}]
+const links = [
+  {href: '/', label: 'Map'},
+  {href: '/droneclips', label: 'Drone Clips'},
+]
 
 type Props = {
   name: string
