@@ -48,24 +48,22 @@ function triggerDownload(url: string, fileName: string) {
   a.remove()
 }
 
-function readSupport(): WebCodecsSupport | null {
-  if (typeof window === 'undefined') return null
+const SUPPORT_OK: WebCodecsSupport = {supported: true, reason: null}
+const SUPPORT_MISSING: WebCodecsSupport = {
+  supported: false,
+  reason:
+    'This browser cannot compress video here. Try the latest Chrome, Edge, or Safari on a laptop or desktop.',
+}
+
+function readSupport(): WebCodecsSupport {
   if (typeof VideoEncoder === 'undefined' || typeof VideoDecoder === 'undefined') {
-    return {
-      supported: false,
-      reason:
-        'This browser cannot compress video here. Try the latest Chrome, Edge, or Safari on a laptop or desktop.',
-    }
+    return SUPPORT_MISSING
   }
-  return {supported: true, reason: null}
+  return SUPPORT_OK
 }
 
 export function DroneClipsApp() {
-  const support = useSyncExternalStore(
-    () => () => {},
-    readSupport,
-    (): WebCodecsSupport | null => null,
-  )
+  const support = useSyncExternalStore(() => () => {}, readSupport, () => SUPPORT_OK)
   const [modeId, setModeId] = useState<CompressModeId>(DEFAULT_MODE_ID)
   const [items, setItems] = useState<QueueItem[]>([])
   const [busy, setBusy] = useState(false)
@@ -265,14 +263,6 @@ export function DroneClipsApp() {
 
   const hasBlobDownloads = items.some((item) => item.result?.kind === 'blob' && item.downloadUrl)
   const canCompress = support?.supported && items.length > 0 && !busy
-
-  if (support === null) {
-    return (
-      <div className="flex h-full items-center justify-center bg-[#e8e8e8] p-6 text-[15px] text-black/60">
-        Checking your browser…
-      </div>
-    )
-  }
 
   if (!support.supported) {
     return (
