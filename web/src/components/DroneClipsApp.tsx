@@ -1,15 +1,11 @@
 'use client'
 
-import {useCallback, useMemo, useRef, useState, useSyncExternalStore} from 'react'
+import {useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore} from 'react'
 
 import {
-  bufferSinkForFile,
-  canPickOutputDirectory,
+  checkEstimatedOutputSize,
   compressVideoFile,
-  createDirectorySink,
-  pickOutputDirectory,
   type EncodeResult,
-  type OutputSink,
 } from '@/lib/droneclips/encode'
 import {formatBytes} from '@/lib/droneclips/format'
 import {
@@ -22,23 +18,33 @@ import {
 import {probeVideoFile, type FileProbe} from '@/lib/droneclips/probe'
 import type {WebCodecsSupport} from '@/lib/droneclips/support'
 
+type QueueStatus =
+  | 'waiting'
+  | 'probing'
+  | 'ready'
+  | 'compressing'
+  | 'done'
+  | 'error'
+  | 'canceled'
+
 type QueueItem = {
   id: string
   file: File
   probe: FileProbe | null
   probeError: string | null
-  status: 'waiting' | 'probing' | 'ready' | 'compressing' | 'done' | 'error' | 'canceled'
+  status: QueueStatus
   progress: number
   message: string | null
-  result: EncodeResult | null
-  downloadUrl: string | null
+  downloadFileName: string | null
+  canDownload: boolean
 }
 
 function newId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 }
 
-function triggerDownload(url: string, fileName: string) {
+function triggerDownload(blob: Blob, fileName: string) {
+  const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
   a.download = fileName
@@ -46,6 +52,7 @@ function triggerDownload(url: string, fileName: string) {
   document.body.append(a)
   a.click()
   a.remove()
+  URL.revokeObjectURL(url)
 }
 
 const SUPPORT_OK: WebCodecsSupport = {supported: true, reason: null}
@@ -67,9 +74,13 @@ export function DroneClipsApp() {
   const [modeId, setModeId] = useState<CompressModeId>(DEFAULT_MODE_ID)
   const [items, setItems] = useState<QueueItem[]>([])
   const [busy, setBusy] = useState(false)
-  const [batchError, setBatchError] = useState<string | null>(null)
   const cancelRef = useRef<AbortController | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const downloadBlobsRef = useRef<Map<string, EncodeResult>>(new Map())
+  const itemsRef = useRef(items)
+  useEffect(() => {
+    itemsRef.current = items
+  }, [items])
 
   const mode = getMode(modeId)
 
@@ -82,6 +93,8 @@ export function DroneClipsApp() {
     () => estimateOutputBytes(totalInputBytes, mode),
     [totalInputBytes, mode],
   )
+
+  const hasPendingClips = useMemo(() => items.some((item) => item.status !== 'done'), [items])
 
   const updateItem = useCallback((id: string, patch: Partial<QueueItem>) => {
     setItems((prev) => prev.map((item) => (item.id === id ? {...item, ...patch} : item)))
@@ -124,11 +137,10 @@ export function DroneClipsApp() {
         status: 'probing',
         progress: 0,
         message: null,
-        result: null,
-        downloadUrl: null,
+        downloadFileName: null,
+        canDownload: false,
       }))
       setItems((prev) => [...prev, ...next])
-      setBatchError(null)
       for (const item of next) {
         void probeItem(item.id, item.file, mode)
       }
@@ -144,125 +156,119 @@ export function DroneClipsApp() {
     [addFiles],
   )
 
-  const revokeDownloads = useCallback((list: QueueItem[]) => {
-    for (const item of list) {
-      if (item.downloadUrl) URL.revokeObjectURL(item.downloadUrl)
-    }
-  }, [])
-
   const clearQueue = useCallback(() => {
     if (busy) return
-    setItems((prev) => {
-      revokeDownloads(prev)
-      return []
-    })
-    setBatchError(null)
-  }, [busy, revokeDownloads])
+    downloadBlobsRef.current.clear()
+    setItems([])
+  }, [busy])
 
   const cancelCompress = useCallback(() => {
     cancelRef.current?.abort()
   }, [])
 
+  const encodeClip = useCallback(
+    async (itemId: string, signal: AbortSignal) => {
+      const item = itemsRef.current.find((entry) => entry.id === itemId)
+      if (!item || item.status === 'done') return
+
+      const estimated = estimateOutputBytes(item.file.size, mode)
+      const sizeCheck = checkEstimatedOutputSize(estimated)
+      if (!sizeCheck.ok) {
+        updateItem(itemId, {
+          status: 'error',
+          progress: 0,
+          message: sizeCheck.error,
+          canDownload: false,
+        })
+        return
+      }
+
+      downloadBlobsRef.current.delete(itemId)
+      updateItem(itemId, {
+        status: 'compressing',
+        progress: 0,
+        message: null,
+        downloadFileName: null,
+        canDownload: false,
+      })
+
+      try {
+        const result = await compressVideoFile(
+          item.file,
+          mode,
+          ({progress}) => {
+            updateItem(itemId, {progress: Math.round(progress * 100)})
+          },
+          signal,
+        )
+
+        downloadBlobsRef.current.set(itemId, result)
+        updateItem(itemId, {
+          status: 'done',
+          progress: 100,
+          downloadFileName: result.fileName,
+          canDownload: true,
+          message: 'Saved to your Downloads folder. Tap Download if you need another copy.',
+        })
+        triggerDownload(result.blob, result.fileName)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Something went wrong.'
+        if (message === 'Canceled') {
+          updateItem(itemId, {status: 'canceled', progress: 0, message: 'Canceled', canDownload: false})
+          throw error
+        }
+        updateItem(itemId, {status: 'error', progress: 0, message, canDownload: false})
+      }
+    },
+    [mode, updateItem],
+  )
+
   const runCompress = useCallback(async () => {
-    if (items.length === 0 || busy) return
-    setBatchError(null)
+    if (busy) return
+    const queue = itemsRef.current.filter((item) => item.status !== 'done')
+    if (queue.length === 0) return
+
     setBusy(true)
     const abort = new AbortController()
     cancelRef.current = abort
 
-    let sink: OutputSink | null = null
-    const multi = items.length > 1
-    if (multi && canPickOutputDirectory()) {
-      const dir = await pickOutputDirectory()
-      if (dir) sink = createDirectorySink(dir)
-    }
-    if (multi && canPickOutputDirectory() && !sink) {
-      setBatchError('Choose a folder to save your clips, then try again.')
-      setBusy(false)
-      cancelRef.current = null
-      return
-    }
-
-    if (!sink && multi) {
-      setBatchError(
-        'For several clips at once, use Chrome or Edge on a computer so you can pick a folder. Or add one clip at a time.',
-      )
-      setBusy(false)
-      cancelRef.current = null
-      return
-    }
-
     try {
-      for (const item of items) {
+      for (const item of queue) {
         if (abort.signal.aborted) break
-        if (item.status === 'done') continue
-
-        let fileSink: OutputSink | {error: string}
-        if (sink) {
-          fileSink = sink
-        } else {
-          fileSink = bufferSinkForFile(item.file.size)
-          if ('error' in fileSink) {
-            updateItem(item.id, {status: 'error', message: fileSink.error})
-            continue
-          }
-        }
-
-        updateItem(item.id, {status: 'compressing', progress: 0, message: null})
-
+        const latest = itemsRef.current.find((entry) => entry.id === item.id)
+        if (!latest || latest.status === 'done') continue
         try {
-          const result = await compressVideoFile(
-            item.file,
-            mode,
-            fileSink,
-            ({progress}) => {
-              updateItem(item.id, {progress: Math.round(progress * 100)})
-            },
-            abort.signal,
-          )
-
-          let downloadUrl: string | null = null
-          if (result.kind === 'blob') {
-            downloadUrl = URL.createObjectURL(result.blob)
-            triggerDownload(downloadUrl, result.fileName)
-          }
-
-          updateItem(item.id, {
-            status: 'done',
-            progress: 100,
-            result,
-            downloadUrl,
-            message: result.kind === 'saved' ? `Saved as ${result.fileName}` : 'Ready to download',
-          })
+          await encodeClip(item.id, abort.signal)
         } catch (error) {
-          const message = error instanceof Error ? error.message : 'Something went wrong.'
-          if (message === 'Canceled') {
-            updateItem(item.id, {status: 'canceled', message: 'Canceled'})
-          } else {
-            updateItem(item.id, {status: 'error', message})
-          }
-          if (message === 'Canceled') break
+          if (error instanceof Error && error.message === 'Canceled') break
         }
       }
     } finally {
       setBusy(false)
       cancelRef.current = null
     }
-  }, [busy, items, mode, updateItem])
+  }, [busy, encodeClip])
 
-  const downloadAll = useCallback(() => {
-    const ready = items.filter((item) => item.result?.kind === 'blob' && item.downloadUrl)
-    ready.forEach((item, index) => {
-      window.setTimeout(() => {
-        if (item.downloadUrl && item.result?.kind === 'blob') {
-          triggerDownload(item.downloadUrl, item.result.fileName)
-        }
-      }, index * 400)
-    })
-  }, [items])
+  const retryClip = useCallback(
+    async (itemId: string) => {
+      if (busy) return
+      const item = itemsRef.current.find((entry) => entry.id === itemId)
+      if (!item || item.status === 'done' || item.status === 'compressing') return
 
-  const hasBlobDownloads = items.some((item) => item.result?.kind === 'blob' && item.downloadUrl)
-  const canCompress = support?.supported && items.length > 0 && !busy
+      setBusy(true)
+      const abort = new AbortController()
+      cancelRef.current = abort
+      try {
+        await encodeClip(itemId, abort.signal)
+      } finally {
+        setBusy(false)
+        cancelRef.current = null
+      }
+    },
+    [busy, encodeClip],
+  )
+
+  const canCompress = support?.supported && hasPendingClips && !busy
 
   if (!support.supported) {
     return (
@@ -346,17 +352,30 @@ export function DroneClipsApp() {
                   {item.message ? (
                     <p className="mt-1 text-[12px] text-black/60">{item.message}</p>
                   ) : null}
-                  {item.result?.kind === 'blob' && item.downloadUrl ? (
+                  {item.status === 'done' && item.canDownload ? (
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        className="rounded-full bg-black px-4 py-2 text-[13px] font-bold text-white disabled:opacity-40"
+                        onClick={() => {
+                          const saved = downloadBlobsRef.current.get(item.id)
+                          if (saved) triggerDownload(saved.blob, saved.fileName)
+                        }}
+                      >
+                        Download
+                      </button>
+                      {item.downloadFileName ? (
+                        <span className="text-[12px] text-black/55">{item.downloadFileName}</span>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {(item.status === 'error' || item.status === 'canceled') && !busy ? (
                     <button
                       type="button"
-                      className="mt-2 rounded-full bg-black px-4 py-2 text-[13px] font-bold text-white"
-                      onClick={() => {
-                        if (item.downloadUrl && item.result?.kind === 'blob') {
-                          triggerDownload(item.downloadUrl, item.result.fileName)
-                        }
-                      }}
+                      className="mt-2 text-[13px] font-bold text-black underline underline-offset-2"
+                      onClick={() => void retryClip(item.id)}
                     >
-                      Download
+                      Try again
                     </button>
                   ) : null}
                 </li>
@@ -440,12 +459,6 @@ export function DroneClipsApp() {
           </div>
         </fieldset>
 
-        {batchError ? (
-          <p className="mt-4 rounded-xl bg-amber-100 px-3 py-2 text-[13px] leading-snug text-amber-950">
-            {batchError}
-          </p>
-        ) : null}
-
         <div className="mt-8 flex flex-col gap-3 sm:flex-row">
           {busy ? (
             <button
@@ -474,19 +487,9 @@ export function DroneClipsApp() {
           </p>
         ) : null}
 
-        {hasBlobDownloads && items.filter((i) => i.status === 'done').length > 1 ? (
-          <button
-            type="button"
-            className="mt-4 w-full rounded-full border-2 border-black/15 bg-white py-3 text-[15px] font-bold text-black"
-            onClick={downloadAll}
-          >
-            Download all again
-          </button>
-        ) : null}
-
         <p className="mt-10 text-[12px] leading-snug text-black/45">
-          Clips are processed one at a time on your computer. Large batches work best in Chrome or Edge when you can pick
-          a folder to save into.
+          Clips are compressed one at a time, then saved to your Downloads folder. You can add several clips and press
+          Compress once — each file downloads when it is ready.
         </p>
       </div>
     </div>

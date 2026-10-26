@@ -1,5 +1,5 @@
 /**
- * Headless browser encode test for /droneclips (both modes).
+ * Headless browser encode test for /droneclips (both modes + retry).
  * Requires: dev server on PORT, ffmpeg, ffprobe, playwright chromium.
  */
 import {spawnSync} from 'node:child_process'
@@ -62,23 +62,33 @@ function probeDimensions(filePath) {
 }
 
 async function encodeMode(page, modeLabel, downloadDir) {
-  await page.getByRole('button', {name: modeLabel}).click()
+  await page.getByRole('radio', {name: new RegExp(modeLabel)}).click()
+  const downloadPromise = page.waitForEvent('download', {timeout: 180_000})
   await page.getByRole('button', {name: 'Compress'}).click()
-  await page
-    .getByRole('button', {name: 'Download'})
-    .or(page.getByText('Saved as'))
-    .first()
-    .waitFor({timeout: 180_000})
+  const download = await downloadPromise
   const outPath = path.join(downloadDir, `${modeLabel.replace(/\s+/g, '-')}.mp4`)
+  await download.saveAs(outPath)
+  await page.getByText('Saved to your Downloads', {exact: false}).first().waitFor({timeout: 30_000})
   const downloadBtn = page.getByRole('button', {name: 'Download'}).first()
-  if (await downloadBtn.isVisible().catch(() => false)) {
-    const downloadPromise = page.waitForEvent('download', {timeout: 30_000})
-    await downloadBtn.click()
-    const download = await downloadPromise
-    await download.saveAs(outPath)
-    return outPath
+  if (!(await downloadBtn.isEnabled())) {
+    throw new Error(`Download button not enabled after encode (${modeLabel})`)
   }
-  throw new Error(`No download for mode ${modeLabel}`)
+  return outPath
+}
+
+async function testRetryAfterCancel(page, downloadDir) {
+  await page.getByRole('button', {name: 'Clear list'}).click()
+  await page.setInputFiles('input[type="file"]', inputPath)
+  await page.getByRole('button', {name: 'Compress'}).click()
+  await page.getByText('%', {exact: false}).first().waitFor({timeout: 30_000}).catch(() => {})
+  await page.getByRole('button', {name: 'Cancel'}).click({timeout: 5000}).catch(() => {})
+  await page.getByRole('button', {name: 'Try again'}).waitFor({timeout: 30_000})
+  const downloadPromise = page.waitForEvent('download', {timeout: 180_000})
+  await page.getByRole('button', {name: 'Try again'}).click()
+  const download = await downloadPromise
+  const outPath = path.join(downloadDir, 'retry-after-cancel.mp4')
+  await download.saveAs(outPath)
+  return outPath
 }
 
 const browser = await chromium.launch({
@@ -120,6 +130,12 @@ for (const {label, expectW, expectH, maxSizeRatio} of [
   await page.getByRole('button', {name: 'Clear list'}).click()
   await page.setInputFiles('input[type="file"]', inputPath)
 }
+
+console.log('Testing retry after cancel…')
+const retryPath = await testRetryAfterCancel(page, tmpDir)
+const retrySize = fs.statSync(retryPath).size
+if (retrySize < 1024) throw new Error('Retry download was empty')
+console.log(`  → retry OK (${retrySize} bytes)`)
 
 await browser.close()
 

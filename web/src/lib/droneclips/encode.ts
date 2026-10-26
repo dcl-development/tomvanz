@@ -9,11 +9,10 @@ import {
   Input,
   Mp4OutputFormat,
   Output,
-  StreamTarget,
 } from 'mediabunny'
 
+import {formatBytes, outputFileName} from './format'
 import {audioQuality, type CompressMode, fitDimensions, videoQuality} from './modes'
-import {outputFileName} from './format'
 
 let aacEncoderReady = false
 
@@ -31,125 +30,40 @@ export type EncodeProgress = {
   bytesWritten: number
 }
 
-export type EncodeResult =
-  | {kind: 'saved'; fileName: string}
-  | {kind: 'blob'; fileName: string; blob: Blob}
-
-export type OutputSink =
-  | {
-      kind: 'directory'
-      getWritable: (name: string) => Promise<{
-        writable: FileSystemWritableFileStream
-        fileName: string
-      }>
-    }
-  | {kind: 'buffer'}
-
-const BUFFER_FALLBACK_MAX_BYTES = 600 * 1024 * 1024
-
-export function canPickOutputDirectory(): boolean {
-  return typeof window !== 'undefined' && 'showDirectoryPicker' in window
+export type EncodeResult = {
+  fileName: string
+  blob: Blob
 }
 
-export async function pickOutputDirectory(): Promise<FileSystemDirectoryHandle | null> {
-  const picker = window.showDirectoryPicker
-  if (!picker) return null
-  try {
-    return await picker.call(window, {mode: 'readwrite'})
-  } catch {
-    return null
-  }
-}
+/** Max estimated compressed size kept in memory for one clip at a time. */
+export const MAX_OUTPUT_BYTES_IN_MEMORY = Math.floor(1.5 * 1024 ** 3)
 
-export function createDirectorySink(
-  dir: FileSystemDirectoryHandle,
-): OutputSink {
-  return {
-    kind: 'directory',
-    async getWritable(name) {
-      const handle = await dir.getFileHandle(name, {create: true})
-      const writable = await handle.createWritable()
-      return {writable, fileName: name}
-    },
-  }
-}
-
-export function bufferSinkForFile(inputBytes: number): OutputSink | {error: string} {
-  if (inputBytes > BUFFER_FALLBACK_MAX_BYTES) {
+export function checkEstimatedOutputSize(
+  estimatedOutputBytes: number,
+): {ok: true} | {ok: false; error: string} {
+  if (estimatedOutputBytes > MAX_OUTPUT_BYTES_IN_MEMORY) {
     return {
-      error:
-        'This clip is very large for this browser. Use Chrome or Edge on a computer and choose a folder when asked, or compress one clip at a time.',
+      ok: false,
+      error: `This clip would be about ${formatBytes(estimatedOutputBytes)} after compression — too large for the browser to hold at once. Try Quick share, or use a shorter clip.`,
     }
   }
-  return {kind: 'buffer'}
-}
-
-async function createOutput(
-  sink: OutputSink,
-  suggestedName: string,
-): Promise<{
-  output: Output
-  finalize: () => Promise<EncodeResult>
-  trackBytes: (bytes: number) => void
-}> {
-  let bytesWritten = 0
-  const trackBytes = (bytes: number) => {
-    bytesWritten = Math.max(bytesWritten, bytes)
-  }
-
-  if (sink.kind === 'directory') {
-    const {writable, fileName} = await sink.getWritable(suggestedName)
-    const target = new StreamTarget(writable, {chunked: true})
-    target.on('write', ({end}) => {
-      trackBytes(end)
-    })
-    const output = new Output({
-      format: new Mp4OutputFormat(),
-      target,
-    })
-    return {
-      output,
-      trackBytes,
-      async finalize() {
-        await output.finalize()
-        await writable.close()
-        return {kind: 'saved', fileName}
-      },
-    }
-  }
-
-  const target = new BufferTarget()
-  target.on('write', ({end}) => {
-    trackBytes(end)
-  })
-  const output = new Output({
-    format: new Mp4OutputFormat(),
-    target,
-  })
-  return {
-    output,
-    trackBytes,
-    async finalize() {
-      await output.finalize()
-      const buffer = target.buffer
-      if (!buffer) throw new Error('No output was produced.')
-      const blob = new Blob([buffer], {type: 'video/mp4'})
-      return {kind: 'blob', fileName: suggestedName, blob}
-    },
-  }
+  return {ok: true}
 }
 
 export async function compressVideoFile(
   file: File,
   mode: CompressMode,
-  sink: OutputSink,
   onProgress: (progress: EncodeProgress) => void,
   signal?: AbortSignal,
 ): Promise<EncodeResult> {
   await ensureAacEncoder()
 
   const suggestedName = outputFileName(file.name)
-  const {output, finalize} = await createOutput(sink, suggestedName)
+  const target = new BufferTarget()
+  const output = new Output({
+    format: new Mp4OutputFormat(),
+    target,
+  })
 
   const input = new Input({
     source: new BlobSource(file),
@@ -224,7 +138,11 @@ export async function compressVideoFile(
       signal?.removeEventListener('abort', abortHandler)
     }
 
-    return await finalize()
+    await output.finalize()
+    const buffer = target.buffer
+    if (!buffer) throw new Error('No output was produced.')
+    const blob = new Blob([buffer], {type: 'video/mp4'})
+    return {fileName: suggestedName, blob}
   } finally {
     input.dispose()
   }
