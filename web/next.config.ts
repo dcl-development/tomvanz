@@ -9,7 +9,7 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  transpilePackages: ['sanity', 'next-sanity'],
+  transpilePackages: ['sanity', 'next-sanity', 'mediabunny', '@mediabunny/aac-encoder'],
 }
 
 export default nextConfig
