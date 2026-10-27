@@ -1,5 +1,7 @@
 # tomvanz.com
 
+Repo: https://github.com/dcl-development/tomvanz
+
 Personal site for Tom Vanz: a small Next.js app in `web/`.
 
 **Live**
