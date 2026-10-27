@@ -2,7 +2,7 @@
 
 Repo: https://github.com/dcl-development/tomvanz
 
-Personal site for Tom Vanz: a small Next.js app in `web/`.
+Personal site for Tom Vanz: a Next.js app at the repository root.
 
 **Live**
 
@@ -14,7 +14,7 @@ Personal site for Tom Vanz: a small Next.js app in `web/`.
 ## Local setup
 
 ```bash
-cd web && npm install && npm run dev
+npm install && npm run dev
 ```
 
 - Home: http://localhost:3000/
@@ -22,9 +22,9 @@ cd web && npm install && npm run dev
 - Drone Clips: http://localhost:3000/droneclips
 - Studio: http://localhost:3000/studio
 
-Copy `web/.env.example` to `web/.env.local` if you want a Sanity read token. Project id and dataset use the public defaults in the repo.
+Copy `.env.example` to `.env.local` if you want a Sanity read token. Project id and dataset use the public defaults in the repo.
 
-Other commands (from `web/`):
+Other commands:
 
 ```bash
 npm run build
