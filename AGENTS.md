@@ -6,6 +6,8 @@ Personal site for Tom Vanz (tomvanz.com): MapLibre map of trips, pins and GPX tr
 
 This repo follows Jake's dev framework: [jakedcl/dev-framework](https://github.com/jakedcl/dev-framework) (start at its `AGENTS.md`). The framework is the source of truth; if anything in this file conflicts with it, the framework wins.
 
+The framework repo is private. Cloud agents open it with `git clone --depth 1 https://x-access-token:${DEV_FRAMEWORK_READ_TOKEN}@github.com/jakedcl/dev-framework /tmp/dev-framework` (the token is a Cursor secret; never print or commit it).
+
 ## Stack (`package.json`)
 
 Next.js 16.4 App Router, React 19.3, Tailwind 4, maplibre-gl ^6.15, exifr (photo EXIF), Sanity ^6.20 + next-sanity ^13 + @sanity/ui.
