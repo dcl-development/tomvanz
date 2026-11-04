@@ -9,15 +9,14 @@ import {
   type EncodeResult,
 } from '@/lib/droneclips/encode'
 import {formatBytes} from '@/lib/droneclips/format'
-import {shouldKeepOriginalFromFacts} from '@/lib/droneclips/keep-original'
 import {
   COMPRESS_MODES,
   DEFAULT_MODE_ID,
-  estimateOutputBytes,
   getMode,
+  type CompressMode,
   type CompressModeId,
 } from '@/lib/droneclips/modes'
-import {probeVideoFile, type FileProbe} from '@/lib/droneclips/probe'
+import {estimatedBytesForProbe, probeVideoFile, type FileProbe} from '@/lib/droneclips/probe'
 import type {WebCodecsSupport} from '@/lib/droneclips/support'
 
 type QueueStatus =
@@ -42,11 +41,11 @@ type QueueItem = {
   keptOriginal: boolean
 }
 
-function estimatedBytesForItem(file: File, probe: FileProbe | null, mode: ReturnType<typeof getMode>): number {
-  if (probe?.mediaFacts && shouldKeepOriginalFromFacts(probe.mediaFacts, mode)) {
-    return file.size
+function estimatedBytesForItem(file: File, probe: FileProbe | null, mode: CompressMode): number {
+  if (probe) {
+    return estimatedBytesForProbe(file.size, probe, mode)
   }
-  return probe?.estimatedOutputBytes ?? estimateOutputBytes(file.size, mode)
+  return Math.max(256_000, Math.round(file.size * mode.sizeFraction))
 }
 
 const KEPT_ORIGINAL_MESSAGE = 'Already compressed, kept original'
@@ -142,11 +141,21 @@ export function DroneClipsApp() {
             durationSec: null,
             displayWidth: null,
             displayHeight: null,
+            frameRate: null,
             hasAudio: false,
-            estimatedOutputBytes: estimateOutputBytes(file.size, probeMode),
+            estimatedOutputBytes: estimatedBytesForProbe(
+              file.size,
+              {
+                durationSec: null,
+                mediaFacts: null,
+                highEncodePlan: null,
+              },
+              probeMode,
+            ),
             outputWidth: null,
             outputHeight: null,
             mediaFacts: null,
+            highEncodePlan: null,
           },
           probeError: null,
         })
@@ -600,7 +609,14 @@ export function DroneClipsApp() {
           >
             {COMPRESS_MODES.map((option, index) => {
               const selected = option.id === modeId
-              const est = estimateOutputBytes(totalInputBytes || 0, option)
+              const optionMode = getMode(option.id)
+              const est =
+                totalInputBytes > 0
+                  ? items.reduce(
+                      (sum, item) => sum + estimatedBytesForItem(item.file, item.probe, optionMode),
+                      0,
+                    )
+                  : 0
               const estLabel =
                 totalInputBytes > 0
                   ? `About ${formatBytes(est)} total`
