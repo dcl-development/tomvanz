@@ -6,8 +6,8 @@ import {
   type VideoCodec,
 } from 'mediabunny'
 
-import type {CompressMode} from './modes'
-import {modeTargetBitrateBps} from './modes'
+import type {CompressMode, HighEncodePlan} from './modes'
+import {modeTargetBitrateBps, planHighVideoEncode} from './modes'
 
 /** Allow this much headroom above the mode target before skipping re-encode. */
 export const KEEP_ORIGINAL_BITRATE_FACTOR = 1.15
@@ -20,6 +20,7 @@ export type ClipMediaFacts = {
   videoCodec: VideoCodec
   isMp4OrMov: boolean
   totalBitrateBps: number
+  videoBitrateBps: number | null
   durationSec: number
 }
 
@@ -28,6 +29,9 @@ export function modeDisplayLimits(
   displayWidth: number,
   displayHeight: number,
 ): {maxWidth: number; maxHeight: number} {
+  if (mode.preserveResolution) {
+    return {maxWidth: displayWidth, maxHeight: displayHeight}
+  }
   const portrait = displayHeight > displayWidth
   if (portrait) {
     return {maxWidth: mode.maxHeight, maxHeight: mode.maxWidth}
@@ -40,6 +44,9 @@ export function fitsModeResolutionBox(
   displayHeight: number,
   mode: CompressMode,
 ): boolean {
+  if (mode.preserveResolution) {
+    return true
+  }
   const {maxWidth, maxHeight} = modeDisplayLimits(mode, displayWidth, displayHeight)
   return displayWidth <= maxWidth && displayHeight <= maxHeight
 }
@@ -48,14 +55,18 @@ export function isMp4OrMovContainer(format: InputFormat): boolean {
   return format instanceof Mp4InputFormat || format instanceof QuickTimeInputFormat
 }
 
-export function shouldKeepOriginalFromFacts(facts: ClipMediaFacts, mode: CompressMode): boolean {
+export function shouldKeepOriginalFromFacts(
+  facts: ClipMediaFacts,
+  mode: CompressMode,
+  highPlan?: HighEncodePlan | null,
+): boolean {
   if (!facts.isMp4OrMov || !KEEP_VIDEO_CODECS.has(facts.videoCodec)) {
     return false
   }
   if (!fitsModeResolutionBox(facts.displayWidth, facts.displayHeight, mode)) {
     return false
   }
-  const ceiling = modeTargetBitrateBps(mode) * KEEP_ORIGINAL_BITRATE_FACTOR
+  const ceiling = modeTargetBitrateBps(mode, highPlan) * KEEP_ORIGINAL_BITRATE_FACTOR
   return facts.totalBitrateBps <= ceiling
 }
 
@@ -89,6 +100,18 @@ async function readTrackBitrateBps(
   return null
 }
 
+async function readVideoFrameRate(
+  track: {computeFrameRateMetrics: () => Promise<{bestGuessFrameRate: number}>},
+): Promise<number> {
+  try {
+    const metrics = await track.computeFrameRateMetrics()
+    if (metrics.bestGuessFrameRate > 0) return metrics.bestGuessFrameRate
+  } catch {
+    /* fall through */
+  }
+  return 30
+}
+
 export async function gatherClipMediaFacts(input: Input, file: File): Promise<ClipMediaFacts | null> {
   const [format, videoTracks, audioTracks] = await Promise.all([
     input.getFormat(),
@@ -107,10 +130,12 @@ export async function gatherClipMediaFacts(input: Input, file: File): Promise<Cl
 
   let totalBitrateBps = 0
   let hasBitrate = false
+  let videoBitrateBps: number | null = null
 
   const videoBps = await readTrackBitrateBps(video)
   if (videoBps != null) {
     totalBitrateBps += videoBps
+    videoBitrateBps = videoBps
     hasBitrate = true
   }
 
@@ -132,6 +157,7 @@ export async function gatherClipMediaFacts(input: Input, file: File): Promise<Cl
       videoCodec,
       isMp4OrMov: isMp4OrMovContainer(format),
       totalBitrateBps,
+      videoBitrateBps,
       durationSec,
     }
   }
@@ -144,6 +170,7 @@ export async function gatherClipMediaFacts(input: Input, file: File): Promise<Cl
     videoCodec,
     isMp4OrMov: isMp4OrMovContainer(format),
     totalBitrateBps,
+    videoBitrateBps,
     durationSec,
   }
 }
@@ -151,5 +178,20 @@ export async function gatherClipMediaFacts(input: Input, file: File): Promise<Cl
 export async function shouldKeepOriginal(input: Input, file: File, mode: CompressMode): Promise<boolean> {
   const facts = await gatherClipMediaFacts(input, file)
   if (!facts) return false
-  return shouldKeepOriginalFromFacts(facts, mode)
+  let highPlan = null
+  if (mode.id === 'high') {
+    const videoTracks = await input.getVideoTracks()
+    const video = videoTracks[0]
+    if (video) {
+      const frameRate = await readVideoFrameRate(video)
+      highPlan = await planHighVideoEncode(
+        facts.displayWidth,
+        facts.displayHeight,
+        frameRate,
+        facts.videoBitrateBps,
+        mode,
+      )
+    }
+  }
+  return shouldKeepOriginalFromFacts(facts, mode, highPlan)
 }

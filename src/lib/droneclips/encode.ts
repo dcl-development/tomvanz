@@ -13,7 +13,13 @@ import {
 
 import {formatBytes, outputFileName} from './format'
 import {shouldKeepOriginal} from './keep-original'
-import {audioQuality, type CompressMode, fitDimensions, videoQuality} from './modes'
+import {
+  audioQuality,
+  type CompressMode,
+  fitDimensions,
+  planHighVideoEncode,
+  videoQuality,
+} from './modes'
 
 let aacEncoderReady = false
 
@@ -23,6 +29,36 @@ async function ensureAacEncoder() {
     registerAacEncoder()
   }
   aacEncoderReady = true
+}
+
+async function readVideoFrameRate(
+  track: {computeFrameRateMetrics: () => Promise<{bestGuessFrameRate: number}>},
+  mode: CompressMode,
+): Promise<number | undefined> {
+  try {
+    const metrics = await track.computeFrameRateMetrics()
+    const sourceRate = metrics.bestGuessFrameRate
+    if (mode.maxFrameRate) {
+      return Math.min(sourceRate, mode.maxFrameRate)
+    }
+    return sourceRate > 0 ? sourceRate : undefined
+  } catch {
+    return mode.maxFrameRate ?? undefined
+  }
+}
+
+async function readTrackVideoBitrateBps(
+  track: {getAverageBitrate: () => Promise<number | null>; computePacketStats: (n?: number) => Promise<{averageBitrate: number}>},
+): Promise<number | null> {
+  const fromMeta = await track.getAverageBitrate()
+  if (fromMeta != null && fromMeta > 0) return fromMeta
+  try {
+    const stats = await track.computePacketStats(60)
+    if (stats.averageBitrate > 0) return stats.averageBitrate
+  } catch {
+    /* fall through */
+  }
+  return null
 }
 
 export type EncodeProgress = {
@@ -49,7 +85,7 @@ export function checkEstimatedOutputSize(
   if (estimatedOutputBytes > MAX_OUTPUT_BYTES_IN_MEMORY) {
     return {
       ok: false,
-      error: `This clip would be about ${formatBytes(estimatedOutputBytes)} after compression — too large for the browser to hold at once. Try Quick share, or use a shorter clip.`,
+      error: `This clip would be about ${formatBytes(estimatedOutputBytes)} after compression — too large for the browser to hold at once. Try Low quality, or use a shorter clip.`,
     }
   }
   return {ok: true}
@@ -117,16 +153,28 @@ export async function compressVideoFile(
           const srcW = await track.getDisplayWidth()
           const srcH = await track.getDisplayHeight()
           const {width, height} = fitDimensions(srcW, srcH, mode)
-          let frameRate: number | undefined
-          if (mode.maxFrameRate) {
-            try {
-              const metrics = await track.computeFrameRateMetrics()
-              const sourceRate = metrics.bestGuessFrameRate
-              frameRate = Math.min(sourceRate, mode.maxFrameRate)
-            } catch {
-              frameRate = mode.maxFrameRate
+          const frameRate = await readVideoFrameRate(track, mode)
+
+          if (mode.id === 'high') {
+            const sourceVideoBitrateBps = await readTrackVideoBitrateBps(track)
+            const plan = await planHighVideoEncode(
+              width,
+              height,
+              frameRate ?? 30,
+              sourceVideoBitrateBps,
+              mode,
+            )
+            return {
+              codec: plan.codec,
+              width,
+              height,
+              fit: 'contain',
+              frameRate,
+              quality: videoQuality(mode, plan.videoBitrateBps),
+              forceTranscode: true,
             }
           }
+
           return {
             codec: 'avc',
             width,
