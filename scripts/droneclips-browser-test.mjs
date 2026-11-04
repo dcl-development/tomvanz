@@ -7,10 +7,7 @@ import crypto from 'node:crypto'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import {fileURLToPath} from 'node:url'
 import {chromium} from 'playwright'
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const port = Number(process.env.PORT || 3000)
 const baseUrl = `http://127.0.0.1:${port}/droneclips`
 
@@ -102,6 +99,50 @@ async function compressCurrentList(page, modeLabel, clipCount) {
   await waitForClipDone(page)
 }
 
+function listZipEntries(zipPath) {
+  const out = run('unzip', ['-l', zipPath])
+  const lines = out.split('\n').filter((line) => line.match(/^\s+\d+/))
+  return lines
+    .map((line) => {
+      const trimmed = line.trim()
+      const name = trimmed.slice(trimmed.lastIndexOf(' ') + 1)
+      return name
+    })
+    .filter((name) => name.includes('/') || /\.[A-Za-z0-9]+$/.test(name))
+}
+
+async function downloadZip(page, outPath) {
+  const downloadDir = path.dirname(outPath)
+  const cdp = await page.context().newCDPSession(page)
+  await cdp.send('Page.setDownloadBehavior', {
+    behavior: 'allow',
+    downloadPath: downloadDir,
+    eventsEnabled: true,
+  })
+
+  const downloadPromise = page.waitForEvent('download', {timeout: 180_000})
+  await page.getByRole('button', {name: 'Download all (.zip)'}).click()
+  try {
+    const download = await downloadPromise
+    await download.saveAs(outPath)
+    return
+  } catch {
+    const deadline = Date.now() + 180_000
+    while (Date.now() < deadline) {
+      const zips = fs
+        .readdirSync(downloadDir)
+        .filter((name) => name.endsWith('.zip'))
+        .map((name) => path.join(downloadDir, name))
+      if (zips.length > 0) {
+        fs.renameSync(zips.sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs)[0], outPath)
+        return
+      }
+      await new Promise((r) => setTimeout(r, 500))
+    }
+    throw new Error('Zip download did not start')
+  }
+}
+
 async function downloadFirstClip(page, outPath) {
   const downloadPromise = page.waitForEvent('download', {timeout: 180_000})
   await page.getByRole('button', {name: 'Download'}).first().click()
@@ -121,6 +162,7 @@ const report = {
   highBitrateCompress: null,
   roundTripKeepOriginal: null,
   verticalPortrait: null,
+  folderZip: null,
 }
 
 console.log(`Opening ${baseUrl}`)
@@ -197,6 +239,39 @@ report.verticalPortrait = {
 }
 console.log(`  → ${cDims.width}x${cDims.height}, ${cSize} bytes`, report.verticalPortrait)
 
+// (d) Nested folder → zip with structure (video, JPG, sidecar, DNG)
+console.log('Case (d): nested folder zip export…')
+const folderRoot = path.join(tmpDir, 'DCIM', '100MEDIA')
+fs.mkdirSync(folderRoot, {recursive: true})
+const folderClip = path.join(folderRoot, 'clip.mp4')
+const folderJpg = path.join(folderRoot, 'photo.jpg')
+const folderTxt = path.join(folderRoot, 'flight.txt')
+const folderDng = path.join(folderRoot, 'sample.dng')
+makeTestClip(folderClip, {durationSec: 2, width: 1280, height: 720, bitrate: '8M'})
+run('ffmpeg', ['-y', '-f', 'lavfi', '-i', 'color=c=green:s=800x600', '-frames:v', '1', folderJpg])
+fs.writeFileSync(folderTxt, 'flight log sidecar')
+fs.copyFileSync(folderJpg, folderDng)
+
+await page.getByRole('button', {name: 'Clear list'}).click()
+await page.locator('input[webkitdirectory]').setInputFiles(path.join(tmpDir, 'DCIM'))
+await page.waitForTimeout(2000)
+await compressCurrentList(page, 'Medium quality', 4)
+const folderZipPath = path.join(tmpDir, 'case-d-folder.zip')
+await downloadZip(page, folderZipPath)
+const zipEntries = listZipEntries(folderZipPath)
+const expected = [
+  'DCIM/100MEDIA/clip.mp4',
+  'DCIM/100MEDIA/photo.jpg',
+  'DCIM/100MEDIA/flight.txt',
+  'DCIM/100MEDIA/sample.dng',
+]
+report.folderZip = {
+  entries: zipEntries,
+  okCount: zipEntries.length === expected.length,
+  okPaths: expected.every((name) => zipEntries.includes(name)),
+}
+console.log('  →', report.folderZip)
+
 await browser.close()
 
 const failures = []
@@ -205,6 +280,7 @@ if (!report.roundTripKeepOriginal.okKeptMessage || !report.roundTripKeepOriginal
   failures.push('(b) keep-original round-trip')
 }
 if (!report.verticalPortrait.okDims) failures.push('(c) vertical')
+if (!report.folderZip.okCount || !report.folderZip.okPaths) failures.push('(d) folder zip')
 
 if (failures.length) {
   console.error('FAILED cases:', failures)

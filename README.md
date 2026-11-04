@@ -10,7 +10,7 @@ Personal site for Tom Vanz: a Next.js app at the repository root.
 - Map: https://tomvanz.com/map
 - Drone Clips (in-browser video compressor; files stay on your device): https://tomvanz.com/droneclips
 
-Drone Clips offers three quality levels — **Low** (720p, quick sharing), **Medium** (1080p, default), and **High** (full resolution for archiving, HEVC when the browser supports it).
+Drone Clips offers three quality levels — **Low** (720p, quick sharing), **Medium** (1080p, default), and **High** (full resolution for archiving, HEVC when the browser supports it). Drop a whole camera folder to compress videos, pass photos, sidecars, and DNG (RAW) files through unchanged on every mode, and download one zip that preserves the folder layout.
 - Studio: https://tomvanz.com/studio
 
 ## Local setup
