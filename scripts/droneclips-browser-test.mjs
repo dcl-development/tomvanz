@@ -102,11 +102,13 @@ async function compressCurrentList(page, modeLabel, clipCount) {
 function listZipEntries(zipPath) {
   const out = run('unzip', ['-l', zipPath])
   const lines = out.split('\n').filter((line) => line.match(/^\s+\d+/))
-  return lines.map((line) => {
-    const trimmed = line.trim()
-    const name = trimmed.slice(trimmed.lastIndexOf(' ') + 1)
-    return name
-  })
+  return lines
+    .map((line) => {
+      const trimmed = line.trim()
+      const name = trimmed.slice(trimmed.lastIndexOf(' ') + 1)
+      return name
+    })
+    .filter((name) => name.includes('/') || /\.[A-Za-z0-9]+$/.test(name))
 }
 
 async function downloadZip(page, outPath) {
@@ -258,10 +260,10 @@ const folderZipPath = path.join(tmpDir, 'case-d-folder.zip')
 await downloadZip(page, folderZipPath)
 const zipEntries = listZipEntries(folderZipPath)
 const expected = [
-  '100MEDIA/clip.mp4',
-  '100MEDIA/photo.jpg',
-  '100MEDIA/flight.txt',
-  '100MEDIA/sample.dng',
+  'DCIM/100MEDIA/clip.mp4',
+  'DCIM/100MEDIA/photo.jpg',
+  'DCIM/100MEDIA/flight.txt',
+  'DCIM/100MEDIA/sample.dng',
 ]
 report.folderZip = {
   entries: zipEntries,

@@ -43,8 +43,7 @@ yarn-error.log*
 # copied from node_modules on predev/prebuild
 /public/maplibre/*.mjs
 /public/maplibre/*.mjs.map
-/public/vendor/libraw-wasm/*
-/public/vendor/streamsaver/*
+/public/vendor/*
 
 # typescript
 *.tsbuildinfo

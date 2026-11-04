@@ -50,9 +50,6 @@ type QueueItem = {
 
 function estimatedBytesForItem(item: QueueItem, mode: CompressMode): number {
   if (!isVideoKind(item.kind)) {
-    if (item.kind === 'raw' && mode.id !== 'high') {
-      return Math.min(item.file.size, Math.round(item.file.size * 0.35))
-    }
     return item.file.size
   }
   if (item.probe) {
@@ -73,7 +70,6 @@ type ZipSummary = {
   compressed: number
   kept: number
   copied: number
-  converted: number
   inputBytes: number
   outputBytes: number
 }
@@ -98,8 +94,6 @@ function doneMessage(result: ItemProcessResult, sourceFileName: string): string 
   switch (result.action) {
     case 'copied':
       return 'Copied through unchanged.'
-    case 'converted':
-      return `Converted to JPEG (${formatBytes(result.outputBytes)}).`
     case 'kept':
       if (/\.dng$/i.test(sourceFileName)) return 'RAW kept unchanged.'
       return `${KEPT_ORIGINAL_MESSAGE} (${formatBytes(result.inputBytes)})`
@@ -490,7 +484,6 @@ export function DroneClipsApp() {
         compressed: 0,
         kept: 0,
         copied: 0,
-        converted: 0,
         inputBytes: 0,
         outputBytes: 0,
       }
@@ -500,7 +493,6 @@ export function DroneClipsApp() {
         summary.inputBytes += saved.inputBytes
         summary.outputBytes += saved.outputBytes
         if (saved.action === 'compressed') summary.compressed += 1
-        else if (saved.action === 'converted') summary.converted += 1
         else if (saved.action === 'copied') summary.copied += 1
         else if (saved.action === 'kept') summary.kept += 1
       }
@@ -556,8 +548,8 @@ export function DroneClipsApp() {
       <div className="mx-auto max-w-xl px-4 py-6 pb-10 md:py-8">
         <h1 className="text-[26px] font-bold tracking-tight text-black">Drone clips</h1>
         <p className="mt-2 text-[15px] leading-snug text-black/65">
-          Shrink drone videos and export a whole camera folder as one zip. Your files stay on this device — nothing is
-          uploaded.
+          Shrink drone videos and export a whole camera folder as one zip. Photos, sidecars, and DNG (RAW) files are
+          copied through unchanged on every quality mode. Your files stay on this device — nothing is uploaded.
         </p>
 
         <div
@@ -885,11 +877,9 @@ export function DroneClipsApp() {
 }
 
 function summaryLine(summary: ZipSummary): string {
-  const parts = [
-    `${summary.compressed} compressed`,
-    `${summary.kept} kept`,
-    `${summary.copied} copied`,
-    `${summary.converted} converted to JPEG`,
-  ]
+  const parts: string[] = []
+  if (summary.compressed) parts.push(`${summary.compressed} compressed`)
+  if (summary.kept) parts.push(`${summary.kept} kept unchanged`)
+  if (summary.copied) parts.push(`${summary.copied} copied`)
   return `${parts.join(', ')} — ${formatBytes(summary.inputBytes)} → ${formatBytes(summary.outputBytes)}`
 }

@@ -1,9 +1,9 @@
 import {compressVideoFile} from './encode'
-import {classifyFile, normalizeZipPath, type FileKind} from './file-kind'
+import {normalizeZipPath, type FileKind} from './file-kind'
 import type {CompressMode} from './modes'
 import type {FileProbe} from './probe'
 
-export type ProcessAction = 'compressed' | 'kept' | 'copied' | 'converted'
+export type ProcessAction = 'compressed' | 'kept' | 'copied'
 
 export type ItemProcessResult = {
   fileName: string
@@ -42,29 +42,10 @@ export async function processQueueItem(
 ): Promise<ItemProcessResult> {
   const path = normalizeZipPath(relativePath)
 
-  if (kind === 'other' || kind === 'photo') {
-    return passthrough(file, path, 'copied')
-  }
-
-  if (kind === 'raw') {
-    if (mode.id === 'high') {
-      return passthrough(file, path, 'kept')
-    }
-    const {tryConvertDngToJpeg} = await import('./dng-to-jpeg')
-    const converted = await tryConvertDngToJpeg(file, path)
-    if (converted) {
-      onProgress({progress: 100})
-      return {
-        fileName: converted.downloadFileName,
-        blob: converted.blob,
-        keptOriginal: false,
-        action: 'converted',
-        zipRelativePath: converted.zipRelativePath,
-        inputBytes: file.size,
-        outputBytes: converted.blob.size,
-      }
-    }
-    return passthrough(file, path, 'kept')
+  if (kind === 'other' || kind === 'photo' || kind === 'raw') {
+    const action = kind === 'photo' || kind === 'other' ? 'copied' : 'kept'
+    onProgress({progress: 100})
+    return passthrough(file, path, action)
   }
 
   const videoResult = await compressVideoFile(
@@ -84,8 +65,4 @@ export async function processQueueItem(
     inputBytes: file.size,
     outputBytes: videoResult.blob.size,
   }
-}
-
-export function kindForFile(file: File): FileKind {
-  return classifyFile(file)
 }

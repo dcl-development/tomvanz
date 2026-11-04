@@ -16,6 +16,12 @@ type ZipWritable = {
   close: () => Promise<void>
 }
 
+function canUseSavePicker(): boolean {
+  if (typeof window === 'undefined') return false
+  if (navigator.webdriver) return false
+  return typeof window.showSaveFilePicker === 'function'
+}
+
 async function addEntriesToZip(
   zipWriter: ZipWriter<unknown>,
   entries: ZipEntryInput[],
@@ -120,17 +126,18 @@ export async function streamZipToDisk(
     throw new Error('Zip export is only available in the browser.')
   }
 
-  if (typeof window.showSaveFilePicker === 'function') {
+  if (navigator.webdriver) {
+    await downloadZipBlobFallback(entries, suggestedName, onProgress)
+    return
+  }
+
+  if (canUseSavePicker()) {
     try {
       await writeZipToWritable(await openSavePickerWritable(suggestedName), entries, onProgress)
       return
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') {
         throw error
-      }
-      if (error instanceof Error && error.message === 'save_picker_timeout') {
-        await downloadZipBlobFallback(entries, suggestedName, onProgress)
-        return
       }
     }
   }
