@@ -2,13 +2,10 @@
 
 import {useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore} from 'react'
 
-import {
-  checkBatchEstimatedOutputSize,
-  checkEstimatedOutputSize,
-  compressVideoFile,
-  type EncodeResult,
-} from '@/lib/droneclips/encode'
+import {checkBatchEstimatedOutputSize, checkEstimatedOutputSize} from '@/lib/droneclips/encode'
+import {classifyFile, isVideoKind, type FileKind} from '@/lib/droneclips/file-kind'
 import {formatBytes} from '@/lib/droneclips/format'
+import {ingestFromDataTransfer, ingestFromFileList, type IngestedFile} from '@/lib/droneclips/ingest'
 import {
   COMPRESS_MODES,
   DEFAULT_MODE_ID,
@@ -16,8 +13,14 @@ import {
   type CompressMode,
   type CompressModeId,
 } from '@/lib/droneclips/modes'
+import {
+  processQueueItem,
+  type ItemProcessResult,
+  type ProcessAction,
+} from '@/lib/droneclips/process-item'
 import {estimatedBytesForProbe, probeVideoFile, type FileProbe} from '@/lib/droneclips/probe'
 import type {WebCodecsSupport} from '@/lib/droneclips/support'
+import {defaultZipNameFromPaths, streamZipToDisk} from '@/lib/droneclips/zip-download'
 
 type QueueStatus =
   | 'waiting'
@@ -31,6 +34,8 @@ type QueueStatus =
 type QueueItem = {
   id: string
   file: File
+  relativePath: string
+  kind: FileKind
   probe: FileProbe | null
   probeError: string | null
   status: QueueStatus
@@ -39,13 +44,21 @@ type QueueItem = {
   downloadFileName: string | null
   canDownload: boolean
   keptOriginal: boolean
+  processAction: ProcessAction | null
+  outputBytes: number | null
 }
 
-function estimatedBytesForItem(file: File, probe: FileProbe | null, mode: CompressMode): number {
-  if (probe) {
-    return estimatedBytesForProbe(file.size, probe, mode)
+function estimatedBytesForItem(item: QueueItem, mode: CompressMode): number {
+  if (!isVideoKind(item.kind)) {
+    if (item.kind === 'raw' && mode.id !== 'high') {
+      return Math.min(item.file.size, Math.round(item.file.size * 0.35))
+    }
+    return item.file.size
   }
-  return Math.max(256_000, Math.round(file.size * mode.sizeFraction))
+  if (item.probe) {
+    return estimatedBytesForProbe(item.file.size, item.probe, mode)
+  }
+  return Math.max(256_000, Math.round(item.file.size * mode.sizeFraction))
 }
 
 const KEPT_ORIGINAL_MESSAGE = 'Already compressed, kept original'
@@ -56,11 +69,19 @@ type BatchSummary = {
   total: number
 } | null
 
+type ZipSummary = {
+  compressed: number
+  kept: number
+  copied: number
+  converted: number
+  inputBytes: number
+  outputBytes: number
+}
+
 function newId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 }
 
-/** One object URL per download; revoked shortly after the click so nothing persists per clip. */
 function triggerDownload(blob: Blob, fileName: string) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
@@ -71,6 +92,22 @@ function triggerDownload(blob: Blob, fileName: string) {
   a.click()
   a.remove()
   window.setTimeout(() => URL.revokeObjectURL(url), 250)
+}
+
+function doneMessage(result: ItemProcessResult, sourceFileName: string): string {
+  switch (result.action) {
+    case 'copied':
+      return 'Copied through unchanged.'
+    case 'converted':
+      return `Converted to JPEG (${formatBytes(result.outputBytes)}).`
+    case 'kept':
+      if (/\.dng$/i.test(sourceFileName)) return 'RAW kept unchanged.'
+      return `${KEPT_ORIGINAL_MESSAGE} (${formatBytes(result.inputBytes)})`
+    case 'compressed':
+      return 'Ready — use Download when you want a copy on disk.'
+    default:
+      return 'Done.'
+  }
 }
 
 const SUPPORT_OK: WebCodecsSupport = {supported: true, reason: null}
@@ -92,12 +129,16 @@ export function DroneClipsApp() {
   const [modeId, setModeId] = useState<CompressModeId>(DEFAULT_MODE_ID)
   const [items, setItems] = useState<QueueItem[]>([])
   const [busy, setBusy] = useState(false)
+  const [zipBusy, setZipBusy] = useState(false)
+  const [zipProgress, setZipProgress] = useState<{done: number; total: number} | null>(null)
+  const [zipSummary, setZipSummary] = useState<ZipSummary | null>(null)
   const [batchSummary, setBatchSummary] = useState<BatchSummary>(null)
   const [batchWarning, setBatchWarning] = useState<string | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
   const cancelRef = useRef<AbortController | null>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
-  const downloadBlobsRef = useRef<Map<string, EncodeResult>>(new Map())
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const folderInputRef = useRef<HTMLInputElement>(null)
+  const downloadBlobsRef = useRef<Map<string, ItemProcessResult>>(new Map())
   const itemsRef = useRef(items)
   useEffect(() => {
     itemsRef.current = items
@@ -111,13 +152,15 @@ export function DroneClipsApp() {
   )
 
   const estimatedTotalOutput = useMemo(
-    () => items.reduce((sum, item) => sum + estimatedBytesForItem(item.file, item.probe, mode), 0),
+    () => items.reduce((sum, item) => sum + estimatedBytesForItem(item, mode), 0),
     [items, mode],
   )
 
-  const hasPendingClips = useMemo(() => items.some((item) => item.status !== 'done'), [items])
+  const hasPendingItems = useMemo(() => items.some((item) => item.status !== 'done'), [items])
 
   const doneItems = useMemo(() => items.filter((item) => item.status === 'done' && item.canDownload), [items])
+
+  const allDone = items.length > 0 && items.every((item) => item.status === 'done' && item.canDownload)
 
   const selectedDoneCount = useMemo(
     () => doneItems.filter((item) => selectedIds.has(item.id)).length,
@@ -171,48 +214,79 @@ export function DroneClipsApp() {
     if (busy) return
     const nextMode = getMode(modeId)
     for (const item of itemsRef.current) {
-      if (item.status === 'compressing') continue
+      if (item.status === 'compressing' || !isVideoKind(item.kind)) continue
       void probeItem(item.id, item.file, nextMode)
     }
   }, [modeId, busy, probeItem])
 
-  const addFiles = useCallback(
-    (fileList: FileList | File[]) => {
-      const files = Array.from(fileList).filter((f) => f.type.startsWith('video/') || /\.(mov|mp4|m4v)$/i.test(f.name))
-      if (files.length === 0) return
+  const addIngested = useCallback(
+    (ingested: IngestedFile[]) => {
+      if (ingested.length === 0) return
       setBatchSummary(null)
       setBatchWarning(null)
-      const next: QueueItem[] = files.map((file) => ({
-        id: newId(),
-        file,
-        probe: null,
-        probeError: null,
-        status: 'probing',
-        progress: 0,
-        message: null,
-        downloadFileName: null,
-        canDownload: false,
-        keptOriginal: false,
-      }))
+      setZipSummary(null)
+
+      const next: QueueItem[] = ingested.map(({file, relativePath}) => {
+        const kind = classifyFile(file)
+        return {
+          id: newId(),
+          file,
+          relativePath,
+          kind,
+          probe: null,
+          probeError: null,
+          status: isVideoKind(kind) ? 'probing' : 'ready',
+          progress: 0,
+          message: null,
+          downloadFileName: null,
+          canDownload: false,
+          keptOriginal: false,
+          processAction: null,
+          outputBytes: null,
+        }
+      })
+
       setItems((prev) => [...prev, ...next])
       for (const item of next) {
-        void probeItem(item.id, item.file, mode)
+        if (isVideoKind(item.kind)) {
+          void probeItem(item.id, item.file, mode)
+        }
       }
     },
     [mode, probeItem],
   )
 
+  const addVideoFiles = useCallback(
+    (fileList: FileList | File[]) => {
+      const ingested = ingestFromFileList(fileList).filter(
+        ({file}) => file.type.startsWith('video/') || /\.(mov|mp4|m4v)$/i.test(file.name),
+      )
+      addIngested(ingested)
+    },
+    [addIngested],
+  )
+
+  const addFolderFiles = useCallback(
+    (fileList: FileList | File[]) => {
+      addIngested(ingestFromFileList(fileList))
+    },
+    [addIngested],
+  )
+
   const onDrop = useCallback(
     (event: React.DragEvent) => {
       event.preventDefault()
-      if (event.dataTransfer.files?.length) addFiles(event.dataTransfer.files)
+      void (async () => {
+        const ingested = await ingestFromDataTransfer(event.dataTransfer)
+        addIngested(ingested)
+      })()
     },
-    [addFiles],
+    [addIngested],
   )
 
   const removeClip = useCallback(
     (id: string) => {
-      if (busy) return
+      if (busy || zipBusy) return
       downloadBlobsRef.current.delete(id)
       setSelectedIds((prev) => {
         const next = new Set(prev)
@@ -221,17 +295,18 @@ export function DroneClipsApp() {
       })
       setItems((prev) => prev.filter((item) => item.id !== id))
     },
-    [busy],
+    [busy, zipBusy],
   )
 
   const clearQueue = useCallback(() => {
-    if (busy) return
+    if (busy || zipBusy) return
     downloadBlobsRef.current.clear()
     setSelectedIds(new Set())
     setBatchSummary(null)
     setBatchWarning(null)
+    setZipSummary(null)
     setItems([])
-  }, [busy])
+  }, [busy, zipBusy])
 
   const cancelCompress = useCallback(() => {
     cancelRef.current?.abort()
@@ -264,21 +339,23 @@ export function DroneClipsApp() {
     }
   }, [doneItems, selectedIds])
 
-  const encodeClip = useCallback(
+  const processItem = useCallback(
     async (itemId: string, signal: AbortSignal) => {
       const item = itemsRef.current.find((entry) => entry.id === itemId)
       if (!item || item.status === 'done') return 'skipped' as const
 
-      const estimated = estimatedBytesForItem(item.file, item.probe, mode)
-      const sizeCheck = checkEstimatedOutputSize(estimated)
-      if (!sizeCheck.ok) {
-        updateItem(itemId, {
-          status: 'error',
-          progress: 0,
-          message: sizeCheck.error,
-          canDownload: false,
-        })
-        return 'error' as const
+      if (isVideoKind(item.kind)) {
+        const estimated = estimatedBytesForItem(item, mode)
+        const sizeCheck = checkEstimatedOutputSize(estimated)
+        if (!sizeCheck.ok) {
+          updateItem(itemId, {
+            status: 'error',
+            progress: 0,
+            message: sizeCheck.error,
+            canDownload: false,
+          })
+          return 'error' as const
+        }
       }
 
       downloadBlobsRef.current.delete(itemId)
@@ -289,30 +366,34 @@ export function DroneClipsApp() {
         downloadFileName: null,
         canDownload: false,
         keptOriginal: false,
+        processAction: null,
+        outputBytes: null,
       })
 
       try {
-        const result = await compressVideoFile(
+        const result = await processQueueItem(
           item.file,
+          item.relativePath,
+          item.kind,
           mode,
+          item.probe,
           ({progress}) => {
-            updateItem(itemId, {progress: Math.round(progress * 100)})
+            updateItem(itemId, {progress})
           },
           signal,
         )
 
         downloadBlobsRef.current.set(itemId, result)
         setSelectedIds((prev) => new Set(prev).add(itemId))
-        const keptMessage = result.keptOriginal
-          ? `${KEPT_ORIGINAL_MESSAGE} (${formatBytes(item.file.size)})`
-          : 'Ready — use Download when you want a copy on disk.'
         updateItem(itemId, {
           status: 'done',
           progress: 100,
           downloadFileName: result.fileName,
           canDownload: true,
           keptOriginal: result.keptOriginal,
-          message: keptMessage,
+          processAction: result.action,
+          outputBytes: result.outputBytes,
+          message: doneMessage(result, item.file.name),
         })
         return 'done' as const
       } catch (error) {
@@ -337,12 +418,9 @@ export function DroneClipsApp() {
       .filter((item) => item.status === 'done')
       .reduce((sum, item) => {
         const blob = downloadBlobsRef.current.get(item.id)?.blob
-        return sum + (blob?.size ?? estimatedBytesForItem(item.file, item.probe, mode))
+        return sum + (blob?.size ?? estimatedBytesForItem(item, mode))
       }, 0)
-    const pendingEstimate = queue.reduce(
-      (sum, item) => sum + estimatedBytesForItem(item.file, item.probe, mode),
-      0,
-    )
+    const pendingEstimate = queue.reduce((sum, item) => sum + estimatedBytesForItem(item, mode), 0)
     const batchCheck = checkBatchEstimatedOutputSize(doneBytes + pendingEstimate)
     if (!batchCheck.ok) {
       setBatchWarning(batchCheck.error)
@@ -350,6 +428,7 @@ export function DroneClipsApp() {
     }
     setBatchWarning(null)
     setBatchSummary(null)
+    setZipSummary(null)
 
     setBusy(true)
     const abort = new AbortController()
@@ -357,7 +436,6 @@ export function DroneClipsApp() {
 
     let done = 0
     let failed = 0
-    const total = queue.length
 
     try {
       for (const item of queue) {
@@ -365,7 +443,7 @@ export function DroneClipsApp() {
         const latest = itemsRef.current.find((entry) => entry.id === item.id)
         if (!latest || latest.status === 'done') continue
         try {
-          const outcome = await encodeClip(item.id, abort.signal)
+          const outcome = await processItem(item.id, abort.signal)
           if (outcome === 'done') done += 1
           else if (outcome === 'error') failed += 1
         } catch (error) {
@@ -375,7 +453,9 @@ export function DroneClipsApp() {
     } finally {
       setBusy(false)
       cancelRef.current = null
-      const stillPending = itemsRef.current.filter((item) => item.status !== 'done' && item.status !== 'error' && item.status !== 'canceled')
+      const stillPending = itemsRef.current.filter(
+        (item) => item.status !== 'done' && item.status !== 'error' && item.status !== 'canceled',
+      )
       if (!abort.signal.aborted && stillPending.length === 0) {
         const finalDone = itemsRef.current.filter((i) => i.status === 'done').length
         const finalFailed = itemsRef.current.filter((i) => i.status === 'error' || i.status === 'canceled').length
@@ -385,10 +465,60 @@ export function DroneClipsApp() {
           setBatchSummary({done: finalDone, failed: finalFailed, total: finalDone + finalFailed})
         }
       } else if (!abort.signal.aborted) {
-        setBatchSummary({done, failed, total})
+        setBatchSummary({done, failed, total: queue.length})
       }
     }
-  }, [busy, encodeClip, mode])
+  }, [busy, processItem, mode])
+
+  const downloadAllZip = useCallback(async () => {
+    if (busy || zipBusy || !allDone) return
+
+    setZipBusy(true)
+    setZipProgress(null)
+    setZipSummary(null)
+    setBatchWarning(null)
+
+    try {
+      const ordered = [...itemsRef.current].sort((a, b) => a.relativePath.localeCompare(b.relativePath))
+      const entries = ordered.map((item) => {
+        const saved = downloadBlobsRef.current.get(item.id)
+        if (!saved) throw new Error('Missing processed file.')
+        return {relativePath: saved.zipRelativePath, blob: saved.blob}
+      })
+
+      const summary: ZipSummary = {
+        compressed: 0,
+        kept: 0,
+        copied: 0,
+        converted: 0,
+        inputBytes: 0,
+        outputBytes: 0,
+      }
+      for (const item of ordered) {
+        const saved = downloadBlobsRef.current.get(item.id)
+        if (!saved) continue
+        summary.inputBytes += saved.inputBytes
+        summary.outputBytes += saved.outputBytes
+        if (saved.action === 'compressed') summary.compressed += 1
+        else if (saved.action === 'converted') summary.converted += 1
+        else if (saved.action === 'copied') summary.copied += 1
+        else if (saved.action === 'kept') summary.kept += 1
+      }
+
+      setZipProgress({done: 0, total: entries.length})
+      const zipName = defaultZipNameFromPaths(ordered.map((i) => i.relativePath))
+      await streamZipToDisk(entries, zipName, (progress) => {
+        setZipProgress({done: progress.entriesDone, total: progress.entriesTotal})
+      })
+      setZipSummary(summary)
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return
+      setBatchWarning(error instanceof Error ? error.message : 'Could not save zip.')
+    } finally {
+      setZipBusy(false)
+      setZipProgress(null)
+    }
+  }, [allDone, busy, zipBusy])
 
   const retryClip = useCallback(
     async (itemId: string) => {
@@ -400,16 +530,17 @@ export function DroneClipsApp() {
       const abort = new AbortController()
       cancelRef.current = abort
       try {
-        await encodeClip(itemId, abort.signal)
+        await processItem(itemId, abort.signal)
       } finally {
         setBusy(false)
         cancelRef.current = null
       }
     },
-    [busy, encodeClip],
+    [busy, processItem],
   )
 
-  const canCompress = support?.supported && hasPendingClips && !busy
+  const canCompress = support?.supported && hasPendingItems && !busy && !zipBusy
+  const canDownloadZip = allDone && !busy && !zipBusy
 
   if (!support.supported) {
     return (
@@ -425,7 +556,8 @@ export function DroneClipsApp() {
       <div className="mx-auto max-w-xl px-4 py-6 pb-10 md:py-8">
         <h1 className="text-[26px] font-bold tracking-tight text-black">Drone clips</h1>
         <p className="mt-2 text-[15px] leading-snug text-black/65">
-          Shrink drone videos so they are easier to text or post. Your files stay on this device — nothing is uploaded.
+          Shrink drone videos and export a whole camera folder as one zip. Your files stay on this device — nothing is
+          uploaded.
         </p>
 
         <div
@@ -433,24 +565,45 @@ export function DroneClipsApp() {
           onDragOver={(e) => e.preventDefault()}
           onDrop={onDrop}
         >
-          <p className="text-[16px] font-bold text-black">Drop videos here</p>
-          <p className="mt-1 text-[14px] text-black/55">or</p>
-          <button
-            type="button"
-            className="mt-3 rounded-full bg-black px-6 py-3 text-[15px] font-bold text-white"
-            onClick={() => inputRef.current?.click()}
-            disabled={busy}
-          >
-            Choose videos
-          </button>
+          <p className="text-[16px] font-bold text-black">Drop videos or a folder here</p>
+          <p className="mt-1 text-[14px] text-black/55">DCIM folders include photos and sidecar files too.</p>
+          <div className="mt-4 flex flex-col items-center gap-2 sm:flex-row sm:justify-center">
+            <button
+              type="button"
+              className="rounded-full bg-black px-6 py-3 text-[15px] font-bold text-white"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={busy || zipBusy}
+            >
+              Choose videos
+            </button>
+            <button
+              type="button"
+              className="rounded-full border-2 border-black/20 bg-white px-6 py-3 text-[15px] font-bold text-black"
+              onClick={() => folderInputRef.current?.click()}
+              disabled={busy || zipBusy}
+            >
+              Choose folder
+            </button>
+          </div>
           <input
-            ref={inputRef}
+            ref={fileInputRef}
             type="file"
             accept="video/*,.mov,.mp4,.m4v"
             multiple
             className="hidden"
             onChange={(e) => {
-              if (e.target.files) addFiles(e.target.files)
+              if (e.target.files) addVideoFiles(e.target.files)
+              e.target.value = ''
+            }}
+          />
+          <input
+            ref={folderInputRef}
+            type="file"
+            multiple
+            className="hidden"
+            {...({webkitdirectory: '', directory: ''} as React.InputHTMLAttributes<HTMLInputElement>)}
+            onChange={(e) => {
+              if (e.target.files) addFolderFiles(e.target.files)
               e.target.value = ''
             }}
           />
@@ -470,14 +623,26 @@ export function DroneClipsApp() {
           </p>
         ) : null}
 
+        {zipProgress ? (
+          <p className="mt-4 rounded-xl bg-black/[0.06] px-4 py-3 text-[14px] text-black">
+            Building zip… {zipProgress.done} of {zipProgress.total} files
+          </p>
+        ) : null}
+
+        {zipSummary && !zipBusy ? (
+          <p className="mt-4 rounded-xl bg-black/[0.06] px-4 py-3 text-[14px] leading-snug text-black">
+            Zip saved — {summaryLine(zipSummary)}
+          </p>
+        ) : null}
+
         {items.length > 0 ? (
           <div className="mt-6 rounded-2xl bg-white p-4 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-[13px] font-bold uppercase tracking-[0.12em] text-black/40">
-                {items.length} clip{items.length === 1 ? '' : 's'}
+                {items.length} file{items.length === 1 ? '' : 's'}
               </p>
               <div className="flex flex-wrap items-center gap-3">
-                {doneItems.length > 0 && !busy ? (
+                {doneItems.length > 0 && !busy && !zipBusy ? (
                   <>
                     <button
                       type="button"
@@ -501,13 +666,21 @@ export function DroneClipsApp() {
                     >
                       Download selected ({selectedDoneCount})
                     </button>
+                    <button
+                      type="button"
+                      className="rounded-full border-2 border-black/25 bg-white px-4 py-2 text-[13px] font-bold text-black disabled:opacity-40"
+                      disabled={!canDownloadZip}
+                      onClick={() => void downloadAllZip()}
+                    >
+                      Download all (.zip)
+                    </button>
                   </>
                 ) : null}
                 <button
                   type="button"
                   className="text-[13px] text-black/45 underline-offset-2 hover:text-black/70 hover:underline"
                   onClick={clearQueue}
-                  disabled={busy}
+                  disabled={busy || zipBusy}
                 >
                   Clear list
                 </button>
@@ -523,19 +696,23 @@ export function DroneClipsApp() {
                         className="mt-1 h-4 w-4 shrink-0 accent-black"
                         checked={selectedIds.has(item.id)}
                         onChange={() => toggleSelected(item.id)}
-                        disabled={busy}
-                        aria-label={`Select ${item.file.name} for download`}
+                        disabled={busy || zipBusy}
+                        aria-label={`Select ${item.relativePath} for download`}
                       />
                     ) : (
                       <span className="mt-1 inline-block h-4 w-4 shrink-0" aria-hidden />
                     )}
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-[14px] font-bold text-black">{item.file.name}</p>
+                      <p className="truncate text-[14px] font-bold text-black" title={item.relativePath}>
+                        {item.relativePath}
+                      </p>
                       <p className="text-[12px] text-black/50">
                         {formatBytes(item.file.size)}
-                        {item.status === 'done' && item.keptOriginal
-                          ? ` — ${KEPT_ORIGINAL_MESSAGE}`
-                          : ` → about ${formatBytes(estimatedBytesForItem(item.file, item.probe, mode))}`}
+                        {item.status === 'done' && item.outputBytes != null
+                          ? ` → ${formatBytes(item.outputBytes)}`
+                          : item.status !== 'done'
+                            ? ` → about ${formatBytes(estimatedBytesForItem(item, mode))}`
+                            : ''}
                       </p>
                       {item.status === 'compressing' ? (
                         <div className="mt-2">
@@ -578,12 +755,12 @@ export function DroneClipsApp() {
                         </button>
                       ) : null}
                     </div>
-                    {!busy ? (
+                    {!busy && !zipBusy ? (
                       <button
                         type="button"
                         className="shrink-0 text-[12px] text-black/40 hover:text-black/70"
                         onClick={() => removeClip(item.id)}
-                        aria-label={`Remove ${item.file.name}`}
+                        aria-label={`Remove ${item.relativePath}`}
                       >
                         Remove
                       </button>
@@ -595,7 +772,7 @@ export function DroneClipsApp() {
           </div>
         ) : null}
 
-        <fieldset className="mt-8 border-0 p-0" disabled={busy}>
+        <fieldset className="mt-8 border-0 p-0" disabled={busy || zipBusy}>
           <legend
             id="compress-mode-legend"
             className="text-[13px] font-bold uppercase tracking-[0.12em] text-black/40"
@@ -612,10 +789,7 @@ export function DroneClipsApp() {
               const optionMode = getMode(option.id)
               const est =
                 totalInputBytes > 0
-                  ? items.reduce(
-                      (sum, item) => sum + estimatedBytesForItem(item.file, item.probe, optionMode),
-                      0,
-                    )
+                  ? items.reduce((sum, item) => sum + estimatedBytesForItem(item, optionMode), 0)
                   : 0
               const estLabel =
                 totalInputBytes > 0
@@ -638,9 +812,7 @@ export function DroneClipsApp() {
                       <span
                         aria-hidden
                         className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 ${
-                          selected
-                            ? 'border-white bg-white'
-                            : 'border-black/30 bg-transparent'
+                          selected ? 'border-white bg-white' : 'border-black/30 bg-transparent'
                         }`}
                       >
                         {selected ? <span className="h-2 w-2 rounded-full bg-black" /> : null}
@@ -663,9 +835,7 @@ export function DroneClipsApp() {
                     </span>
                     <p
                       className={`mt-2.5 border-t pt-2.5 pl-6 text-[12px] leading-snug sm:pl-6 ${
-                        selected
-                          ? 'border-white/20 text-white/70'
-                          : 'border-black/8 text-black/50'
+                        selected ? 'border-white/20 text-white/70' : 'border-black/8 text-black/50'
                       }`}
                     >
                       {option.finePrint}
@@ -706,10 +876,20 @@ export function DroneClipsApp() {
         ) : null}
 
         <p className="mt-10 text-[12px] leading-snug text-black/45">
-          Clips compress one at a time and stay in memory until you download or clear the list. Nothing is written to
-          disk until you choose Download.
+          Files are processed one at a time in memory until you download or clear the list. Download all streams an
+          uncompressed zip to your chosen save location when your browser supports it.
         </p>
       </div>
     </div>
   )
+}
+
+function summaryLine(summary: ZipSummary): string {
+  const parts = [
+    `${summary.compressed} compressed`,
+    `${summary.kept} kept`,
+    `${summary.copied} copied`,
+    `${summary.converted} converted to JPEG`,
+  ]
+  return `${parts.join(', ')} — ${formatBytes(summary.inputBytes)} → ${formatBytes(summary.outputBytes)}`
 }
