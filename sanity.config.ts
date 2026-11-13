@@ -9,6 +9,7 @@ export default defineConfig({
   projectId: 'lee2r8sa',
   dataset: 'production',
   basePath: '/studio',
+  releases: {enabled: false},
   plugins: [structureTool({structure})],
   schema: {types: schemaTypes},
   document: {
