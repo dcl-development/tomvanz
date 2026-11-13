@@ -10,6 +10,8 @@ export default defineConfig({
   dataset: 'production',
   basePath: '/studio',
   releases: {enabled: false},
+  scheduledDrafts: {enabled: false},
+  tasks: {enabled: false},
   plugins: [structureTool({structure})],
   schema: {types: schemaTypes},
   document: {
