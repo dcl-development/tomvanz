@@ -1,7 +1,8 @@
 'use client'
 
-import {useEffect, useState} from 'react'
+import {useEffect, useMemo, useState} from 'react'
 import {createPortal} from 'react-dom'
+import {ElevationChart} from './ElevationChart'
 import {PinShape} from './shapes'
 import {formatMiles, lineMiles} from '@/lib/geo'
 import {urlFor} from '@/lib/sanity/image'
@@ -129,6 +130,8 @@ function Lightbox({url, alt, onClose}: {url: string; alt: string; onClose: () =>
 export function InfoCard({data, selected, onClose, placement}: Props) {
   const [expanded, setExpanded] = useState(false)
   const [copied, setCopied] = useState(false)
+  const track = selected.kind === 'track' ? data.tracks.find((item) => item._id === selected.id) : undefined
+  const routeCoords = useMemo(() => (track ? lineCoordinates(track.route) : null), [track])
   const card = cardModel(data, selected)
   if (!card) return null
 
@@ -157,7 +160,8 @@ export function InfoCard({data, selected, onClose, placement}: Props) {
       ? 'tv-card tv-sheet absolute inset-x-0 bottom-0 z-20 max-h-[78vh] overflow-auto rounded-t-[28px] bg-white pb-[env(safe-area-inset-bottom)] shadow-[0_-12px_48px_rgba(0,0,0,0.25)]'
       : 'tv-card w-[340px] overflow-hidden rounded-[22px] bg-white shadow-[0_24px_64px_rgba(0,0,0,0.3)] ring-1 ring-black/5'
 
-  const hasDetails = card.stats.length > 0 || Boolean(card.body)
+  const hasRoute = Boolean(routeCoords && routeCoords.length >= 2)
+  const hasDetails = card.stats.length > 0 || Boolean(card.body) || hasRoute
 
   return (
     <article className={frame}>
@@ -252,6 +256,7 @@ export function InfoCard({data, selected, onClose, placement}: Props) {
               {card.body}
             </p>
           ) : null}
+          {hasRoute && routeCoords ? <ElevationChart coords={routeCoords} color={card.accent} /> : null}
         </div>
       ) : null}
 

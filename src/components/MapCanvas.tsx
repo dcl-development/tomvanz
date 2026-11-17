@@ -160,7 +160,10 @@ function focusSelection(
     for (const [lng, lat] of lineCoordinates(track.route)) bounds.extend([lng, lat])
     if (bounds.isEmpty()) return
     map.fitBounds(bounds, {
-      padding: popupMode ? {top: 340, bottom: 70, left: 70, right: 70} : {top: 90, bottom: 340, left: 40, right: 40},
+      // The card opens above the route's start, so leave it room (it's taller for routes with an elevation chart).
+      padding: popupMode
+        ? {top: Math.min(500, Math.round(map.getContainer().clientHeight * 0.7)), bottom: 60, left: 70, right: 70}
+        : {top: 90, bottom: 360, left: 40, right: 40},
       maxZoom: 15,
       duration,
     })
@@ -189,6 +192,8 @@ export function MapCanvas({data, filters, threeD, selected, highlightId, onSelec
   const onSelectRef = useRef(onSelect)
   const onPileRef = useRef(onPile)
   const activeIdRef = useRef<string | null>(null)
+  /** True once the map's style has loaded; unlike map.loaded() it stays true while tiles download. */
+  const readyRef = useRef(false)
   const selectedRef = useRef(selected)
   const popupModeRef = useRef(true)
   const onMapErrorRef = useRef(onMapError)
@@ -278,6 +283,7 @@ export function MapCanvas({data, filters, threeD, selected, highlightId, onSelec
       map.getCanvas().style.cursor = hovering ? 'pointer' : ''
     })
     map.on('load', () => {
+      readyRef.current = true
       syncMap(map, dataRef.current, filtersRef.current, pinCtx(), markersRef)
       if (selectedRef.current) {
         focusSelection(map, dataRef.current, selectedRef.current, popupModeRef.current, 0)
@@ -293,6 +299,7 @@ export function MapCanvas({data, filters, threeD, selected, highlightId, onSelec
     return () => {
       markersRef.current.forEach((marker) => marker.remove())
       markersRef.current = new Map()
+      readyRef.current = false
       map.remove()
       mapRef.current = null
     }
@@ -305,13 +312,13 @@ export function MapCanvas({data, filters, threeD, selected, highlightId, onSelec
       return
     }
     const map = mapRef.current
-    if (!map?.loaded()) return
+    if (!map || !readyRef.current) return
     applyThreeD(map, threeD)
   }, [threeD])
 
   useEffect(() => {
     const map = mapRef.current
-    if (!map?.loaded()) return
+    if (!map || !readyRef.current) return
     syncMap(map, data, filters, pinCtx(), markersRef)
   }, [data, filters])
 
@@ -325,7 +332,7 @@ export function MapCanvas({data, filters, threeD, selected, highlightId, onSelec
 
   useEffect(() => {
     const map = mapRef.current
-    if (!map?.loaded()) return
+    if (!map || !readyRef.current) return
     const style = map.getStyle()
     for (const layer of style?.layers ?? []) {
       if (!layer.id.startsWith('track-line-')) continue
@@ -337,7 +344,7 @@ export function MapCanvas({data, filters, threeD, selected, highlightId, onSelec
 
   useEffect(() => {
     const map = mapRef.current
-    if (!map?.loaded() || !selected) return
+    if (!map || !readyRef.current || !selected) return
     focusSelection(map, data, selected, popupMode, 500)
   }, [selected, popupMode, data])
 

@@ -1,10 +1,21 @@
 'use client'
 
-import {useCallback, useEffect, useMemo, useRef, useState} from 'react'
+import {useCallback, useDeferredValue, useEffect, useMemo, useRef, useState} from 'react'
 import dynamic from 'next/dynamic'
 import {MapLayers, type LayerFilters} from './MapLayers'
 import {InfoCard} from './InfoCard'
+import {MapSearch} from './MapSearch'
 import {PileStrip} from './PileStrip'
+import {lineMiles} from '@/lib/geo'
+import {
+  applyMapFilters,
+  emptyMapFilters,
+  filterOptions,
+  resultList,
+  trackCoords,
+  type MapFilterState,
+  type ResultItem,
+} from '@/lib/map-filters'
 import type {MapData, PinDoc, SelectedItem} from '@/lib/sanity/types'
 
 const MapCanvas = dynamic(() => import('./MapCanvas').then((mod) => mod.MapCanvas), {
@@ -24,9 +35,19 @@ type Props = {
 
 const emptyFilters: LayerFilters = {tracks: true, pins: true}
 
-export function MapApp({data, initialSelected = null}: Props) {
+export function MapApp({data: allData, initialSelected = null}: Props) {
   const [filters, setFilters] = useState<LayerFilters>(emptyFilters)
   const [selected, setSelected] = useState<SelectedItem | null>(initialSelected)
+  const [searchKey, setSearchKey] = useState(0)
+  const [mapFilters, setMapFilters] = useState<MapFilterState>(emptyMapFilters)
+  // The map follows typing a beat later, so it doesn't re-fit on every keystroke.
+  const deferredFilters = useDeferredValue(mapFilters)
+  const data = useMemo(() => applyMapFilters(allData, deferredFilters), [allData, deferredFilters])
+  const options = useMemo(() => filterOptions(allData), [allData])
+  const results = useMemo(
+    () => resultList(applyMapFilters(allData, mapFilters), mapFilters.sort, (track) => lineMiles(trackCoords(track))),
+    [allData, mapFilters],
+  )
   const [pileIds, setPileIds] = useState<string[] | null>(null)
   const [pileIndex, setPileIndex] = useState(0)
   const [mapFailed, setMapFailed] = useState(false)
@@ -76,9 +97,17 @@ export function MapApp({data, initialSelected = null}: Props) {
     window.history.replaceState(window.history.state, '', url)
   }, [selected])
 
+  const pickResult = useCallback((item: ResultItem) => {
+    setPileIds(null)
+    setSelected(item.kind === 'pin' ? {kind: 'pin', id: item.id} : {kind: 'track', id: item.id, fly: true})
+    // Close the results list so it isn't covering the card; the filters stay applied.
+    setSearchKey((key) => key + 1)
+  }, [])
+
   const visibleCount =
     (filters.tracks ? data.tracks.length : 0) + (filters.pins ? data.pins.length : 0)
-  const total = data.tracks.length + data.pins.length
+  const total = allData.tracks.length + allData.pins.length
+  const matching = data.tracks.length + data.pins.length
 
   const selectedStillVisible = useMemo(() => {
     if (!selected) return false
@@ -107,16 +136,28 @@ export function MapApp({data, initialSelected = null}: Props) {
         />
       )}
       {!mapFailed ? (
+        <MapSearch
+          key={searchKey}
+          state={mapFilters}
+          onChange={setMapFilters}
+          typeOptions={options.typeOptions}
+          years={options.years}
+          results={results}
+          total={allData.pins.length + allData.tracks.length}
+          onPick={pickResult}
+        />
+      ) : null}
+      {!mapFailed ? (
         <MapLayers filters={filters} onChange={setFilters} threeD={threeD} onThreeDChange={changeThreeD} />
       ) : null}
       {!mapFailed && total === 0 ? (
-        <p className="pointer-events-none absolute left-4 top-4 z-10 text-[14px] text-black/55">
+        <p className="pointer-events-none absolute left-4 top-[68px] z-10 rounded-full bg-white/85 px-3 py-1.5 text-[13px] text-black/60 shadow-sm">
           Nothing mapped yet.
         </p>
       ) : null}
       {!mapFailed && total > 0 && visibleCount === 0 ? (
-        <p className="pointer-events-none absolute left-4 top-4 z-10 text-[14px] text-black/55">
-          Nothing mapped yet.
+        <p className="pointer-events-none absolute left-4 top-[68px] z-10 rounded-full bg-white/85 px-3 py-1.5 text-[13px] text-black/60 shadow-sm">
+          {matching === 0 ? 'Nothing matches your search.' : 'Nothing mapped yet.'}
         </p>
       ) : null}
       {hint ? (
