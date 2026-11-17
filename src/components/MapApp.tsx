@@ -1,6 +1,6 @@
 'use client'
 
-import {useMemo, useState} from 'react'
+import {useEffect, useMemo, useRef, useState} from 'react'
 import dynamic from 'next/dynamic'
 import {MapLayers, type LayerFilters} from './MapLayers'
 import {InfoCard} from './InfoCard'
@@ -25,6 +25,24 @@ export function MapApp({data}: Props) {
   const [filters, setFilters] = useState<LayerFilters>(emptyFilters)
   const [selected, setSelected] = useState<SelectedItem | null>(null)
   const [mapFailed, setMapFailed] = useState(false)
+  const [threeD, setThreeD] = useState(false)
+  const [hint, setHint] = useState<'touch' | 'mouse' | null>(null)
+  const hintTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => () => {
+    if (hintTimer.current) clearTimeout(hintTimer.current)
+  }, [])
+
+  const changeThreeD = (next: boolean) => {
+    setThreeD(next)
+    if (hintTimer.current) clearTimeout(hintTimer.current)
+    if (!next) {
+      setHint(null)
+      return
+    }
+    setHint(window.matchMedia('(pointer: coarse)').matches ? 'touch' : 'mouse')
+    hintTimer.current = setTimeout(() => setHint(null), 5000)
+  }
 
   const visibleCount =
     (filters.tracks ? data.tracks.length : 0) + (filters.pins ? data.pins.length : 0)
@@ -48,12 +66,15 @@ export function MapApp({data}: Props) {
         <MapCanvas
           data={data}
           filters={filters}
+          threeD={threeD}
           selected={card}
           onSelect={setSelected}
           onMapError={() => setMapFailed(true)}
         />
       )}
-      {!mapFailed ? <MapLayers filters={filters} onChange={setFilters} /> : null}
+      {!mapFailed ? (
+        <MapLayers filters={filters} onChange={setFilters} threeD={threeD} onThreeDChange={changeThreeD} />
+      ) : null}
       {!mapFailed && total === 0 ? (
         <p className="pointer-events-none absolute left-4 top-4 z-10 text-[14px] text-black/55">
           Nothing mapped yet.
@@ -63,6 +84,18 @@ export function MapApp({data}: Props) {
         <p className="pointer-events-none absolute left-4 top-4 z-10 text-[14px] text-black/55">
           Nothing mapped yet.
         </p>
+      ) : null}
+      {hint ? (
+        <div
+          role="status"
+          className="tv-hint pointer-events-none absolute inset-x-0 bottom-[92px] z-10 flex justify-center px-14 md:bottom-16"
+        >
+          <p className="max-w-[340px] rounded-2xl bg-black/80 px-4 py-2.5 text-center text-[13px] leading-snug text-white shadow-lg backdrop-blur-md">
+            {hint === 'touch'
+              ? 'Drag with two fingers up or down to tilt, twist to rotate, pinch to zoom.'
+              : 'Right-click and drag (or Ctrl + drag) to tilt and rotate. Scroll to zoom.'}
+          </p>
+        </div>
       ) : null}
       {card ? (
         <div className="md:hidden">

@@ -40,6 +40,7 @@ const STYLE: StyleSpecification = {
 type Props = {
   data: MapData
   filters: LayerFilters
+  threeD: boolean
   selected: SelectedItem | null
   onSelect: (item: SelectedItem | null) => void
   onMapError: () => void
@@ -73,6 +74,43 @@ function selectionPoint(data: MapData, selected: SelectedItem): [number, number]
 }
 
 const MARKER_PX = 30
+
+const DEM_SOURCE_ID = 'terrain-dem'
+const TILT_PITCH = 62
+const TERRAIN_EXAGGERATION = 1.4
+
+/** Turn 3D terrain on or off. The elevation source is only added the first time it's needed. */
+function applyThreeD(map: MapLibreMap, on: boolean) {
+  if (on) {
+    if (!map.getSource(DEM_SOURCE_ID)) {
+      map.addSource(DEM_SOURCE_ID, {
+        type: 'raster-dem',
+        tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
+        encoding: 'terrarium',
+        tileSize: 256,
+        maxzoom: 15,
+        attribution: 'Terrain: Mapzen, Tilezen, USGS, NASA SRTM and others',
+      })
+    }
+    map.setMaxPitch(80)
+    map.setTerrain({source: DEM_SOURCE_ID, exaggeration: TERRAIN_EXAGGERATION})
+    map.setSky({
+      'sky-color': '#8fb8e8',
+      'horizon-color': '#dbe9f6',
+      'fog-color': '#e8eef4',
+      'sky-horizon-blend': 0.6,
+      'horizon-fog-blend': 0.7,
+      'fog-ground-blend': 0.2,
+    })
+    map.easeTo({pitch: TILT_PITCH, duration: 900})
+  } else {
+    map.easeTo({pitch: 0, bearing: 0, duration: 700})
+    map.once('moveend', () => {
+      map.setTerrain(null)
+      map.setMaxPitch(60)
+    })
+  }
+}
 
 /**
  * Pins whose thumbnails overlap the clicked one on screen (and anything
@@ -123,7 +161,7 @@ function hitLayerIds(map: MapLibreMap): string[] {
     .filter((id) => id.startsWith('track-hit-'))
 }
 
-export function MapCanvas({data, filters, selected, onSelect, onMapError}: Props) {
+export function MapCanvas({data, filters, threeD, selected, onSelect, onMapError}: Props) {
   const rootRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<MapLibreMap | null>(null)
   const markersRef = useRef<Marker[]>([])
@@ -131,6 +169,7 @@ export function MapCanvas({data, filters, selected, onSelect, onMapError}: Props
   const onMapErrorRef = useRef(onMapError)
   const dataRef = useRef(data)
   const filtersRef = useRef(filters)
+  const threeDRef = useRef(threeD)
   const [popupMode, setPopupMode] = useState(() => window.matchMedia('(min-width: 768px)').matches)
 
   useEffect(() => {
@@ -138,7 +177,8 @@ export function MapCanvas({data, filters, selected, onSelect, onMapError}: Props
     onMapErrorRef.current = onMapError
     dataRef.current = data
     filtersRef.current = filters
-  }, [onSelect, onMapError, data, filters])
+    threeDRef.current = threeD
+  }, [onSelect, onMapError, data, filters, threeD])
 
   useEffect(() => {
     const mq = window.matchMedia('(min-width: 768px)')
@@ -167,7 +207,11 @@ export function MapCanvas({data, filters, selected, onSelect, onMapError}: Props
 
     mapRef.current = map
     map.addControl(new NavigationControl({showCompass: false}), 'bottom-right')
-    map.on('error', () => onMapErrorRef.current())
+    map.on('error', (event) => {
+      // A missing elevation tile just leaves the terrain flat; it shouldn't take down the map.
+      if ((event as {sourceId?: string}).sourceId === DEM_SOURCE_ID) return
+      onMapErrorRef.current()
+    })
     map.on('click', (event) => {
       const layers = hitLayerIds(map)
       if (layers.length) {
@@ -196,6 +240,7 @@ export function MapCanvas({data, filters, selected, onSelect, onMapError}: Props
     })
     map.on('load', () => {
       syncMap(map, dataRef.current, filtersRef.current, onSelectRef.current, markersRef)
+      if (threeDRef.current) applyThreeD(map, true)
     })
 
     return () => {
@@ -205,6 +250,17 @@ export function MapCanvas({data, filters, selected, onSelect, onMapError}: Props
       mapRef.current = null
     }
   }, [])
+
+  const firstThreeD = useRef(true)
+  useEffect(() => {
+    if (firstThreeD.current) {
+      firstThreeD.current = false
+      return
+    }
+    const map = mapRef.current
+    if (!map?.loaded()) return
+    applyThreeD(map, threeD)
+  }, [threeD])
 
   useEffect(() => {
     const map = mapRef.current

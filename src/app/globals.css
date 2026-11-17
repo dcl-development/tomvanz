@@ -86,3 +86,29 @@ button {
     animation: none;
   }
 }
+
+@keyframes tv-hint {
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  8%,
+  88% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(0);
+  }
+}
+
+.tv-hint {
+  animation: tv-hint 5s ease-out forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tv-hint {
+    animation: none;
+  }
+}
