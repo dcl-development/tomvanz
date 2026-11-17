@@ -118,7 +118,7 @@ export function resultList(shown: MapData, sort: SortMode, miles: (track: TrackD
     ...shown.pins.map<ResultItem>((pin) => ({
       kind: 'pin',
       id: pin._id,
-      title: pin.title,
+      title: pin.title?.trim() || 'Untitled photo',
       label: PIN_LABELS[pin.kind] ?? 'Place',
       date: pin.at,
       photo: pin.photo,
@@ -127,7 +127,7 @@ export function resultList(shown: MapData, sort: SortMode, miles: (track: TrackD
     ...shown.tracks.map<ResultItem>((track) => ({
       kind: 'track',
       id: track._id,
-      title: track.title,
+      title: track.title?.trim() || 'Untitled route',
       label: TRACK_LABELS[track.activity] ?? 'Route',
       date: track.startedAt,
       photo: track.photo,

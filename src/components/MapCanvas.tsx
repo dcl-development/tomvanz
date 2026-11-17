@@ -140,7 +140,7 @@ function zoomIntoPile(map: MapLibreMap, group: PinDoc[]) {
   const ne = bounds.getNorthEast()
   if (Math.abs(ne.lng - sw.lng) < 1e-5 && Math.abs(ne.lat - sw.lat) < 1e-5) return
   const camera = map.cameraForBounds(bounds, {
-    padding: {top: 96, bottom: 210, left: 96, right: 96},
+    padding: {top: 96, bottom: 270, left: 96, right: 96},
     maxZoom: 18,
   })
   if (!camera || camera.zoom == null || camera.zoom <= map.getZoom() + 0.3) return
@@ -543,7 +543,7 @@ function renderPins(
     el.dataset.kind = 'pin'
     el.dataset.id = pin._id
     el.dataset.active = ctx.getActiveId() === pin._id ? 'true' : 'false'
-    el.setAttribute('aria-label', pin.title)
+    el.setAttribute('aria-label', pin.title?.trim() || 'Photo')
     // Later pins sit on top, exactly as when every marker was added in order.
     el.style.zIndex = String(index)
     // The button only positions the marker; the visible photo sits in an inner layer so the

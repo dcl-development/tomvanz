@@ -160,8 +160,13 @@ export function InfoCard({data, selected, onClose, placement}: Props) {
       ? 'tv-card tv-sheet absolute inset-x-0 bottom-0 z-20 max-h-[78vh] overflow-auto rounded-t-[28px] bg-white pb-[env(safe-area-inset-bottom)] shadow-[0_-12px_48px_rgba(0,0,0,0.25)]'
       : 'tv-card w-[340px] overflow-hidden rounded-[22px] bg-white shadow-[0_24px_64px_rgba(0,0,0,0.3)] ring-1 ring-black/5'
 
+  // An untitled photo leads with its date instead of leaving a blank headline.
+  const untitled = card.title.trim() === ''
+  const headline = untitled ? (card.stats[0] ?? '') : card.title
+  const chips = untitled ? card.stats.slice(1) : card.stats
   const hasRoute = Boolean(routeCoords && routeCoords.length >= 2)
-  const hasDetails = card.stats.length > 0 || Boolean(card.body) || hasRoute
+  const hasDetails = chips.length > 0 || Boolean(card.body) || hasRoute
+  const hasCaption = Boolean(headline) || Boolean(card.eyebrow)
 
   return (
     <article className={frame}>
@@ -198,7 +203,9 @@ export function InfoCard({data, selected, onClose, placement}: Props) {
           </div>
         )}
 
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-3/5 bg-gradient-to-t from-black/75 via-black/30 to-transparent" />
+        {hasCaption ? (
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-3/5 bg-gradient-to-t from-black/75 via-black/30 to-transparent" />
+        ) : null}
 
         {placement === 'sheet' ? (
           <div className="pointer-events-none absolute inset-x-0 top-2 flex justify-center">
@@ -231,17 +238,19 @@ export function InfoCard({data, selected, onClose, placement}: Props) {
             {card.kind ? <PinShape kind={card.kind} className="h-3.5 w-3.5 text-white" /> : null}
             {card.eyebrow}
           </p>
-          <h2 className="mt-1 text-[24px] font-bold leading-[1.1] tracking-tight [text-shadow:0_1px_12px_rgba(0,0,0,0.35)]">
-            {card.title}
-          </h2>
+          {headline ? (
+            <h2 className="mt-1 text-[24px] font-bold leading-[1.1] tracking-tight [text-shadow:0_1px_12px_rgba(0,0,0,0.35)]">
+              {headline}
+            </h2>
+          ) : null}
         </div>
       </div>
 
       {hasDetails ? (
         <div className="px-4 pb-4 pt-3.5">
-          {card.stats.length > 0 ? (
+          {chips.length > 0 ? (
             <div className="flex flex-wrap gap-1.5">
-              {card.stats.map((stat) => (
+              {chips.map((stat) => (
                 <span
                   key={stat}
                   className="rounded-full bg-black/[0.06] px-3 py-1 text-[12px] font-medium text-black/70"
@@ -252,7 +261,7 @@ export function InfoCard({data, selected, onClose, placement}: Props) {
             </div>
           ) : null}
           {card.body ? (
-            <p className={`${card.stats.length ? 'mt-3' : ''} text-[14px] leading-relaxed text-black/70`}>
+            <p className={`${chips.length ? 'mt-3' : ''} text-[14px] leading-relaxed text-black/70`}>
               {card.body}
             </p>
           ) : null}

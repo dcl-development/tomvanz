@@ -63,34 +63,41 @@ export function PileStrip({pins, onIndexChange, onOpen, onClose}: Props) {
       <div
         ref={scroller}
         onScroll={onScroll}
-        className="pointer-events-auto flex snap-x snap-mandatory gap-3 overflow-x-auto px-[calc(50%-120px)] pb-2 [mask-image:linear-gradient(to_right,transparent,black_24px,black_calc(100%-24px),transparent)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="pointer-events-auto flex snap-x snap-mandatory gap-3 overflow-x-auto px-[calc(50%-110px)] pb-2 [mask-image:linear-gradient(to_right,transparent,black_24px,black_calc(100%-24px),transparent)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {pins.map((pin, i) => {
           const date = formatDate(pin.at)
+          const title = pin.title?.trim() ?? ''
+          const caption = title || date
           return (
             <button
               key={pin._id}
               type="button"
               onClick={() => onOpen(pin._id)}
-              aria-label={`Open ${pin.title}`}
-              className={`flex w-[240px] shrink-0 snap-center items-center gap-3 rounded-2xl bg-white p-2 pr-4 text-left shadow-[0_8px_28px_rgba(0,0,0,0.28)] ring-1 ring-black/5 transition-transform duration-200 active:scale-[0.98] ${
-                i === index ? 'scale-100' : 'scale-[0.94] opacity-90'
+              aria-label={`Open ${title || date || 'photo'}`}
+              className={`relative h-[150px] w-[220px] shrink-0 snap-center overflow-hidden rounded-2xl bg-neutral-800 text-left shadow-[0_10px_30px_rgba(0,0,0,0.35)] ring-1 ring-white/20 transition-transform duration-200 active:scale-[0.98] ${
+                i === index ? 'scale-100' : 'scale-[0.93] opacity-90'
               }`}
             >
               {pin.photo?.asset ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
-                  src={urlFor(pin.photo).width(160).height(160).fit('crop').url()}
+                  src={urlFor(pin.photo).width(480).height(330).fit('crop').url()}
                   alt=""
-                  className="h-16 w-16 shrink-0 rounded-xl object-cover"
+                  className="absolute inset-0 h-full w-full object-cover"
                 />
-              ) : (
-                <div className="h-16 w-16 shrink-0 rounded-xl bg-neutral-800" />
-              )}
-              <div className="min-w-0">
-                <p className="truncate text-[15px] font-bold leading-tight tracking-tight">{pin.title}</p>
-                {date ? <p className="mt-0.5 text-[12px] text-black/55">{date}</p> : null}
-              </div>
+              ) : null}
+              {caption ? (
+                <>
+                  <div className="absolute inset-x-0 bottom-0 h-3/5 bg-gradient-to-t from-black/75 via-black/30 to-transparent" />
+                  <div className="absolute inset-x-0 bottom-0 p-3 text-white">
+                    <p className="truncate text-[15px] font-bold leading-tight tracking-tight [text-shadow:0_1px_8px_rgba(0,0,0,0.4)]">
+                      {caption}
+                    </p>
+                    {title && date ? <p className="mt-0.5 text-[11px] text-white/75">{date}</p> : null}
+                  </div>
+                </>
+              ) : null}
             </button>
           )
         })}
