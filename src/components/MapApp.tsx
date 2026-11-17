@@ -1,10 +1,21 @@
 'use client'
 
-import {useEffect, useMemo, useRef, useState} from 'react'
+import {useCallback, useDeferredValue, useEffect, useMemo, useRef, useState} from 'react'
 import dynamic from 'next/dynamic'
 import {MapLayers, type LayerFilters} from './MapLayers'
-import {InfoCard} from './InfoCard'
-import type {MapData, SelectedItem} from '@/lib/sanity/types'
+import {MapSearch} from './MapSearch'
+import {PileStrip} from './PileStrip'
+import {lineMiles} from '@/lib/geo'
+import {
+  applyMapFilters,
+  emptyMapFilters,
+  filterOptions,
+  resultList,
+  trackCoords,
+  type MapFilterState,
+  type ResultItem,
+} from '@/lib/map-filters'
+import type {MapData, PinDoc, SelectedItem} from '@/lib/sanity/types'
 
 const MapCanvas = dynamic(() => import('./MapCanvas').then((mod) => mod.MapCanvas), {
   ssr: false,
@@ -17,13 +28,27 @@ const MapCanvas = dynamic(() => import('./MapCanvas').then((mod) => mod.MapCanva
 
 type Props = {
   data: MapData
+  /** Set when the page was opened from a shared link. */
+  initialSelected?: SelectedItem | null
 }
 
 const emptyFilters: LayerFilters = {tracks: true, pins: true}
 
-export function MapApp({data}: Props) {
+export function MapApp({data: allData, initialSelected = null}: Props) {
   const [filters, setFilters] = useState<LayerFilters>(emptyFilters)
-  const [selected, setSelected] = useState<SelectedItem | null>(null)
+  const [selected, setSelected] = useState<SelectedItem | null>(initialSelected)
+  const [searchKey, setSearchKey] = useState(0)
+  const [mapFilters, setMapFilters] = useState<MapFilterState>(emptyMapFilters)
+  // The map follows typing a beat later, so it doesn't re-fit on every keystroke.
+  const deferredFilters = useDeferredValue(mapFilters)
+  const data = useMemo(() => applyMapFilters(allData, deferredFilters), [allData, deferredFilters])
+  const options = useMemo(() => filterOptions(allData), [allData])
+  const results = useMemo(
+    () => resultList(applyMapFilters(allData, mapFilters), mapFilters.sort, (track) => lineMiles(trackCoords(track))),
+    [allData, mapFilters],
+  )
+  const [pileIds, setPileIds] = useState<string[] | null>(null)
+  const [pileIndex, setPileIndex] = useState(0)
   const [mapFailed, setMapFailed] = useState(false)
   const [threeD, setThreeD] = useState(false)
   const [hint, setHint] = useState<'touch' | 'mouse' | null>(null)
@@ -44,9 +69,44 @@ export function MapApp({data}: Props) {
     hintTimer.current = setTimeout(() => setHint(null), 5000)
   }
 
+  // Any new selection (or a tap on empty map) closes the pile strip.
+  const select = useCallback((item: SelectedItem | null) => {
+    setPileIds(null)
+    setSelected(item)
+  }, [])
+
+  const openPile = useCallback((ids: string[]) => {
+    setSelected(null)
+    setPileIndex(0)
+    setPileIds(ids)
+  }, [])
+
+  const pilePins = useMemo(() => {
+    if (!pileIds) return null
+    const byId = new Map(data.pins.map((pin) => [pin._id, pin]))
+    return pileIds.map((id) => byId.get(id)).filter((pin): pin is PinDoc => Boolean(pin))
+  }, [pileIds, data])
+
+  // Keep the address bar pointing at whatever is open, so the link can be shared.
+  useEffect(() => {
+    const url = new URL(window.location.href)
+    url.searchParams.delete('photo')
+    url.searchParams.delete('track')
+    if (selected) url.searchParams.set(selected.kind === 'pin' ? 'photo' : 'track', selected.id)
+    window.history.replaceState(window.history.state, '', url)
+  }, [selected])
+
+  const pickResult = useCallback((item: ResultItem) => {
+    setPileIds(null)
+    setSelected(item.kind === 'pin' ? {kind: 'pin', id: item.id} : {kind: 'track', id: item.id, fly: true})
+    // Close the results list so it isn't covering the card; the filters stay applied.
+    setSearchKey((key) => key + 1)
+  }, [])
+
   const visibleCount =
     (filters.tracks ? data.tracks.length : 0) + (filters.pins ? data.pins.length : 0)
-  const total = data.tracks.length + data.pins.length
+  const total = allData.tracks.length + allData.pins.length
+  const matching = data.tracks.length + data.pins.length
 
   const selectedStillVisible = useMemo(() => {
     if (!selected) return false
@@ -57,7 +117,10 @@ export function MapApp({data}: Props) {
   const card = selectedStillVisible ? selected : null
 
   return (
-    <div className="relative h-full w-full overflow-hidden bg-[#e8e8e8]">
+    <div
+      className="relative h-full w-full overflow-hidden bg-[#e8e8e8]"
+      data-strip={pilePins && pilePins.length > 1 && !card ? 'true' : 'false'}
+    >
       {mapFailed ? (
         <div className="flex h-full items-center justify-center text-[14px] text-black/70">
           Couldn’t load the map.
@@ -68,21 +131,35 @@ export function MapApp({data}: Props) {
           filters={filters}
           threeD={threeD}
           selected={card}
-          onSelect={setSelected}
+          highlightId={pilePins?.[pileIndex]?._id ?? null}
+          onSelect={select}
+          onPile={openPile}
           onMapError={() => setMapFailed(true)}
         />
       )}
       {!mapFailed ? (
+        <MapSearch
+          key={searchKey}
+          state={mapFilters}
+          onChange={setMapFilters}
+          typeOptions={options.typeOptions}
+          years={options.years}
+          results={results}
+          total={allData.pins.length + allData.tracks.length}
+          onPick={pickResult}
+        />
+      ) : null}
+      {!mapFailed ? (
         <MapLayers filters={filters} onChange={setFilters} threeD={threeD} onThreeDChange={changeThreeD} />
       ) : null}
       {!mapFailed && total === 0 ? (
-        <p className="pointer-events-none absolute left-4 top-4 z-10 text-[14px] text-black/55">
+        <p className="pointer-events-none absolute left-4 top-[68px] z-10 rounded-full bg-white/85 px-3 py-1.5 text-[13px] text-black/60 shadow-sm">
           Nothing mapped yet.
         </p>
       ) : null}
       {!mapFailed && total > 0 && visibleCount === 0 ? (
-        <p className="pointer-events-none absolute left-4 top-4 z-10 text-[14px] text-black/55">
-          Nothing mapped yet.
+        <p className="pointer-events-none absolute left-4 top-[68px] z-10 rounded-full bg-white/85 px-3 py-1.5 text-[13px] text-black/60 shadow-sm">
+          {matching === 0 ? 'Nothing matches your search.' : 'Nothing mapped yet.'}
         </p>
       ) : null}
       {hint ? (
@@ -97,10 +174,13 @@ export function MapApp({data}: Props) {
           </p>
         </div>
       ) : null}
-      {card ? (
-        <div className="md:hidden">
-          <InfoCard data={data} selected={card} onClose={() => setSelected(null)} placement="sheet" />
-        </div>
+      {pilePins && pilePins.length > 1 && !card ? (
+        <PileStrip
+          pins={pilePins}
+          onIndexChange={setPileIndex}
+          onOpen={(id) => select({kind: 'pin', id})}
+          onClose={() => select(null)}
+        />
       ) : null}
     </div>
   )

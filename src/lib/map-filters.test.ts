@@ -1,0 +1,74 @@
+import {describe, expect, it} from 'vitest'
+
+import {
+  applyMapFilters,
+  emptyMapFilters,
+  filterOptions,
+  filtersActive,
+  resultList,
+} from './map-filters'
+import type {MapData} from './sanity/types'
+
+const data: MapData = {
+  name: 'test',
+  pins: [
+    {_id: 'a', title: 'Mount Marcy', kind: 'mountain', note: 'Highest in NY', at: '2025-07-04T10:00:00Z', location: {lat: 44.1, lng: -73.9}},
+    {_id: 'b', title: 'Lake Colden', kind: 'place', at: '2024-07-03T10:00:00Z', location: {lat: 44.1, lng: -73.98}},
+    {_id: 'c', title: 'Undated spot', kind: 'trip', location: {lat: 44.2, lng: -73.8}},
+  ],
+  tracks: [
+    {
+      _id: 't',
+      title: 'Algonquin loop',
+      activity: 'hike',
+      startedAt: '2025-07-03T08:00:00Z',
+      route: {type: 'LineString', coordinates: '[[0,0],[1,1]]'},
+    },
+  ],
+}
+
+describe('applyMapFilters', () => {
+  it('returns everything when no filter is set', () => {
+    expect(filtersActive(emptyMapFilters)).toBe(false)
+    expect(applyMapFilters(data, emptyMapFilters)).toBe(data)
+  })
+
+  it('matches the search text against titles and notes, every word required', () => {
+    const byNote = applyMapFilters(data, {...emptyMapFilters, query: 'highest ny'})
+    expect(byNote.pins.map((p) => p._id)).toEqual(['a'])
+    expect(byNote.tracks).toEqual([])
+  })
+
+  it('filters by type across photos and routes', () => {
+    const hikes = applyMapFilters(data, {...emptyMapFilters, types: ['track:hike']})
+    expect(hikes.pins).toEqual([])
+    expect(hikes.tracks.map((t) => t._id)).toEqual(['t'])
+
+    const mixed = applyMapFilters(data, {...emptyMapFilters, types: ['pin:place', 'track:hike']})
+    expect(mixed.pins.map((p) => p._id)).toEqual(['b'])
+    expect(mixed.tracks).toHaveLength(1)
+  })
+
+  it('filters by year and drops undated items when a year is chosen', () => {
+    const y2025 = applyMapFilters(data, {...emptyMapFilters, year: '2025'})
+    expect(y2025.pins.map((p) => p._id)).toEqual(['a'])
+    expect(y2025.tracks).toHaveLength(1)
+  })
+})
+
+describe('filterOptions', () => {
+  it('only offers kinds and years that exist, newest year first', () => {
+    const {typeOptions, years} = filterOptions(data)
+    expect(typeOptions.map((o) => o.value)).toEqual(['pin:trip', 'pin:mountain', 'pin:place', 'track:hike'])
+    expect(years).toEqual(['2025', '2024'])
+  })
+})
+
+describe('resultList', () => {
+  it('sorts newest, oldest and A–Z, with undated items last by date', () => {
+    const titles = (sort: 'newest' | 'oldest' | 'az') => resultList(data, sort, () => null).map((r) => r.title)
+    expect(titles('newest')).toEqual(['Mount Marcy', 'Algonquin loop', 'Lake Colden', 'Undated spot'])
+    expect(titles('oldest')).toEqual(['Lake Colden', 'Algonquin loop', 'Mount Marcy', 'Undated spot'])
+    expect(titles('az')).toEqual(['Algonquin loop', 'Lake Colden', 'Mount Marcy', 'Undated spot'])
+  })
+})

@@ -1,7 +1,8 @@
 'use client'
 
-import {useEffect, useState} from 'react'
+import {useEffect, useMemo, useState} from 'react'
 import {createPortal} from 'react-dom'
+import {ElevationChart} from './ElevationChart'
 import {PinShape} from './shapes'
 import {formatMiles, lineMiles} from '@/lib/geo'
 import {urlFor} from '@/lib/sanity/image'
@@ -12,7 +13,6 @@ type Props = {
   data: MapData
   selected: SelectedItem
   onClose: () => void
-  placement: 'sheet' | 'popup'
 }
 
 type CardModel = {
@@ -126,17 +126,44 @@ function Lightbox({url, alt, onClose}: {url: string; alt: string; onClose: () =>
   )
 }
 
-export function InfoCard({data, selected, onClose, placement}: Props) {
+export function InfoCard({data, selected, onClose}: Props) {
   const [expanded, setExpanded] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const track = selected.kind === 'track' ? data.tracks.find((item) => item._id === selected.id) : undefined
+  const routeCoords = useMemo(() => (track ? lineCoordinates(track.route) : null), [track])
   const card = cardModel(data, selected)
   if (!card) return null
 
-  const frame =
-    placement === 'sheet'
-      ? 'tv-card tv-sheet absolute inset-x-0 bottom-0 z-20 max-h-[78vh] overflow-auto rounded-t-[28px] bg-white pb-[env(safe-area-inset-bottom)] shadow-[0_-12px_48px_rgba(0,0,0,0.25)]'
-      : 'tv-card w-[340px] overflow-hidden rounded-[22px] bg-white shadow-[0_24px_64px_rgba(0,0,0,0.3)] ring-1 ring-black/5'
+  const share = async () => {
+    const url = new URL('/map', window.location.origin)
+    url.searchParams.set(selected.kind === 'pin' ? 'photo' : 'track', selected.id)
+    try {
+      if (navigator.share) {
+        await navigator.share({title: card.title, url: url.toString()})
+        return
+      }
+    } catch (error) {
+      if ((error as Error).name === 'AbortError') return
+    }
+    try {
+      await navigator.clipboard.writeText(url.toString())
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      /* clipboard blocked: nothing more we can do */
+    }
+  }
 
-  const hasDetails = card.stats.length > 0 || Boolean(card.body)
+  const frame =
+    'tv-card w-[min(340px,calc(100vw-24px))] max-h-[var(--card-max,520px)] overflow-y-auto overflow-x-hidden rounded-[22px] bg-white shadow-[0_24px_64px_rgba(0,0,0,0.3)] ring-1 ring-black/5'
+
+  // An untitled photo leads with its date instead of leaving a blank headline.
+  const untitled = card.title.trim() === ''
+  const headline = untitled ? (card.stats[0] ?? '') : card.title
+  const chips = untitled ? card.stats.slice(1) : card.stats
+  const hasRoute = Boolean(routeCoords && routeCoords.length >= 2)
+  const hasDetails = chips.length > 0 || Boolean(card.body) || hasRoute
+  const hasCaption = Boolean(headline) || Boolean(card.eyebrow)
 
   return (
     <article className={frame}>
@@ -173,14 +200,22 @@ export function InfoCard({data, selected, onClose, placement}: Props) {
           </div>
         )}
 
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-3/5 bg-gradient-to-t from-black/75 via-black/30 to-transparent" />
-
-        {placement === 'sheet' ? (
-          <div className="pointer-events-none absolute inset-x-0 top-2 flex justify-center">
-            <div className="h-1 w-10 rounded-full bg-white/70 shadow-sm" />
-          </div>
+        {hasCaption ? (
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-3/5 bg-gradient-to-t from-black/75 via-black/30 to-transparent" />
         ) : null}
 
+
+        <button
+          type="button"
+          onClick={share}
+          aria-label="Share link"
+          className="absolute left-3 top-3 flex h-9 items-center gap-1.5 rounded-full bg-black/35 px-3 text-[12px] font-semibold text-white backdrop-blur-md transition hover:bg-black/50 active:scale-95"
+        >
+          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M12 3v12M12 3l-4 4M12 3l4 4M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7" />
+          </svg>
+          {copied ? 'Link copied' : 'Share'}
+        </button>
         <button
           type="button"
           onClick={onClose}
@@ -195,17 +230,19 @@ export function InfoCard({data, selected, onClose, placement}: Props) {
             {card.kind ? <PinShape kind={card.kind} className="h-3.5 w-3.5 text-white" /> : null}
             {card.eyebrow}
           </p>
-          <h2 className="mt-1 text-[24px] font-bold leading-[1.1] tracking-tight [text-shadow:0_1px_12px_rgba(0,0,0,0.35)]">
-            {card.title}
-          </h2>
+          {headline ? (
+            <h2 className="mt-1 text-[24px] font-bold leading-[1.1] tracking-tight [text-shadow:0_1px_12px_rgba(0,0,0,0.35)]">
+              {headline}
+            </h2>
+          ) : null}
         </div>
       </div>
 
       {hasDetails ? (
         <div className="px-4 pb-4 pt-3.5">
-          {card.stats.length > 0 ? (
+          {chips.length > 0 ? (
             <div className="flex flex-wrap gap-1.5">
-              {card.stats.map((stat) => (
+              {chips.map((stat) => (
                 <span
                   key={stat}
                   className="rounded-full bg-black/[0.06] px-3 py-1 text-[12px] font-medium text-black/70"
@@ -216,10 +253,11 @@ export function InfoCard({data, selected, onClose, placement}: Props) {
             </div>
           ) : null}
           {card.body ? (
-            <p className={`${card.stats.length ? 'mt-3' : ''} text-[14px] leading-relaxed text-black/70`}>
+            <p className={`${chips.length ? 'mt-3' : ''} text-[14px] leading-relaxed text-black/70`}>
               {card.body}
             </p>
           ) : null}
+          {hasRoute && routeCoords ? <ElevationChart coords={routeCoords} color={card.accent} /> : null}
         </div>
       ) : null}
 
