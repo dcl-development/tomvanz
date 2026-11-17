@@ -10,10 +10,13 @@ export type LayerFilters = {
 type Props = {
   filters: LayerFilters
   onChange: (next: LayerFilters) => void
+  threeD: boolean
+  onThreeDChange: (next: boolean) => void
 }
 
-export function MapLayers({filters, onChange}: Props) {
+export function MapLayers({filters, onChange, threeD, onThreeDChange}: Props) {
   return (
+    <>
     <div className="absolute right-3 top-3 z-10 flex items-center gap-1 rounded-full bg-white/90 px-1 py-1 shadow-sm ring-1 ring-black/10 md:right-4 md:top-4">
       <FilterChip
         label="Tracks"
@@ -30,6 +33,18 @@ export function MapLayers({filters, onChange}: Props) {
         <CatchShape className="h-3.5 w-3.5" />
       </FilterChip>
     </div>
+    <button
+      type="button"
+      onClick={() => onThreeDChange(!threeD)}
+      aria-pressed={threeD}
+      aria-label={threeD ? 'Switch to flat map' : 'Switch to 3D terrain'}
+      className={`absolute right-3 top-[60px] z-10 flex h-9 min-w-[52px] items-center justify-center rounded-full px-3 text-[13px] font-semibold shadow-sm ring-1 ring-black/10 transition md:right-4 md:top-[68px] ${
+        threeD ? 'bg-black text-white' : 'bg-white/90 text-black/70'
+      }`}
+    >
+      3D
+    </button>
+    </>
   )
 }
 

@@ -25,6 +25,7 @@ export function MapApp({data}: Props) {
   const [filters, setFilters] = useState<LayerFilters>(emptyFilters)
   const [selected, setSelected] = useState<SelectedItem | null>(null)
   const [mapFailed, setMapFailed] = useState(false)
+  const [threeD, setThreeD] = useState(false)
 
   const visibleCount =
     (filters.tracks ? data.tracks.length : 0) + (filters.pins ? data.pins.length : 0)
@@ -48,12 +49,15 @@ export function MapApp({data}: Props) {
         <MapCanvas
           data={data}
           filters={filters}
+          threeD={threeD}
           selected={card}
           onSelect={setSelected}
           onMapError={() => setMapFailed(true)}
         />
       )}
-      {!mapFailed ? <MapLayers filters={filters} onChange={setFilters} /> : null}
+      {!mapFailed ? (
+        <MapLayers filters={filters} onChange={setFilters} threeD={threeD} onThreeDChange={setThreeD} />
+      ) : null}
       {!mapFailed && total === 0 ? (
         <p className="pointer-events-none absolute left-4 top-4 z-10 text-[14px] text-black/55">
           Nothing mapped yet.
