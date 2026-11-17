@@ -129,19 +129,22 @@ function overlappingPins(map: MapLibreMap, pins: PinDoc[], origin: PinDoc): PinD
   })
 }
 
-/** Zoom into a pile of overlapping pins; returns false when zooming won't help. */
-function zoomIntoPile(map: MapLibreMap, group: PinDoc[]): boolean {
-  if (group.length < 2) return false
+/**
+ * Gently zoom in so a pile of overlapping pins spreads out, leaving room for the card strip.
+ * Does nothing when zooming wouldn't help (same spot, or already zoomed in).
+ */
+function zoomIntoPile(map: MapLibreMap, group: PinDoc[]) {
   const bounds = new LngLatBounds()
   for (const pin of group) bounds.extend([pin.location.lng, pin.location.lat])
   const sw = bounds.getSouthWest()
   const ne = bounds.getNorthEast()
-  // Every pin at (almost) the same spot: zooming can't separate them.
-  if (Math.abs(ne.lng - sw.lng) < 1e-5 && Math.abs(ne.lat - sw.lat) < 1e-5) return false
-  const camera = map.cameraForBounds(bounds, {padding: 96, maxZoom: 18})
-  if (!camera || camera.zoom == null || camera.zoom <= map.getZoom() + 0.3) return false
+  if (Math.abs(ne.lng - sw.lng) < 1e-5 && Math.abs(ne.lat - sw.lat) < 1e-5) return
+  const camera = map.cameraForBounds(bounds, {
+    padding: {top: 96, bottom: 280, left: 96, right: 96},
+    maxZoom: 18,
+  })
+  if (!camera || camera.zoom == null || camera.zoom <= map.getZoom() + 0.3) return
   map.easeTo({center: camera.center, zoom: camera.zoom, duration: 650})
-  return true
 }
 
 /** Bring a selected pin or track into view. Tapped tracks stay put; ones picked from a list or link fly to it. */
@@ -565,11 +568,11 @@ function renderPins(
     el.addEventListener('click', (event) => {
       event.stopPropagation()
       const group = overlappingPins(map, ctx.data.pins, pin)
-      if (zoomIntoPile(map, group)) return
       if (group.length > 1) {
-        // Can't be pulled apart by zooming: let the user swipe through them instead.
+        // A pile: show its photos as swipeable cards (the tapped one first), and spread them out if we can.
         const rest = group.filter((item) => item._id !== pin._id)
         ctx.onPile([pin._id, ...rest.map((item) => item._id)])
+        zoomIntoPile(map, group)
         return
       }
       ctx.onSelect({kind: 'pin', id: pin._id})
