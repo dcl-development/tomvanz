@@ -4,7 +4,7 @@ import './globals.css'
 export const metadata: Metadata = {
   metadataBase: new URL('https://www.tomvanz.com'),
   title: 'Tom Vanz',
-  description: 'Tom Vanz: a map of trips, routes, and places, plus Drone Clips for making videos smaller before you send them.',
+  description: 'Tom Vanz: a map of trips, routes, and places, plus a video compressor for making drone videos smaller before you send them.',
 }
 
 export default function RootLayout({children}: LayoutProps<'/'>) {

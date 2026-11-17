@@ -1,12 +1,8 @@
-import {client} from '@/lib/sanity/client'
+import {loadSiteName} from '@/lib/sanity/load'
 import {SiteHeader} from '@/components/SiteHeader'
 
-export const dynamic = 'force-dynamic'
-
 export default async function SiteLayout({children}: {children: React.ReactNode}) {
-  const name =
-    (await client.fetch<string | null>('coalesce(*[_type == "siteSettings"][0].name, "Tom Vanz")')) ??
-    'Tom Vanz'
+  const name = await loadSiteName()
 
   return (
     <div className="flex h-dvh flex-col bg-black">

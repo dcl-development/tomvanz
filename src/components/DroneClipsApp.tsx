@@ -546,7 +546,7 @@ export function DroneClipsApp() {
   return (
     <div className="h-full overflow-auto bg-[#e8e8e8]">
       <div className="mx-auto max-w-xl px-4 py-6 pb-10 md:py-8">
-        <h1 className="text-[26px] font-bold tracking-tight text-black">Drone clips</h1>
+        <h1 className="text-[26px] font-bold tracking-tight text-black">Video compressor (Drone)</h1>
         <p className="mt-2 text-[15px] leading-snug text-black/65">
           Shrink drone videos and export a whole camera folder as one zip. Photos, sidecars, and DNG (RAW) files are
           copied through unchanged on every quality mode. Your files stay on this device — nothing is uploaded.

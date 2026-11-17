@@ -30,11 +30,13 @@ type Props = {
   data: MapData
   /** Set when the page was opened from a shared link. */
   initialSelected?: SelectedItem | null
+  /** The map data couldn't be loaded from Sanity (the map still opens, empty). */
+  loadFailed?: boolean
 }
 
 const emptyFilters: LayerFilters = {tracks: true, pins: true}
 
-export function MapApp({data: allData, initialSelected = null}: Props) {
+export function MapApp({data: allData, initialSelected = null, loadFailed = false}: Props) {
   const [filters, setFilters] = useState<LayerFilters>(emptyFilters)
   const [selected, setSelected] = useState<SelectedItem | null>(initialSelected)
   const [searchKey, setSearchKey] = useState(0)
@@ -153,7 +155,15 @@ export function MapApp({data: allData, initialSelected = null}: Props) {
       {!mapFailed ? (
         <MapLayers filters={filters} onChange={setFilters} threeD={threeD} onThreeDChange={changeThreeD} />
       ) : null}
-      {!mapFailed && total === 0 ? (
+      {!mapFailed && loadFailed ? (
+        <p
+          role="status"
+          className="absolute inset-x-3 top-[68px] z-10 mx-auto w-fit max-w-[360px] rounded-2xl bg-white/95 px-4 py-2.5 text-center text-[13px] leading-snug text-black/75 shadow-md"
+        >
+          Couldn’t load the latest map data right now. Try reloading in a minute.
+        </p>
+      ) : null}
+      {!mapFailed && !loadFailed && total === 0 ? (
         <p className="pointer-events-none absolute left-4 top-[68px] z-10 rounded-full bg-white/85 px-3 py-1.5 text-[13px] text-black/60 shadow-sm">
           Nothing mapped yet.
         </p>
