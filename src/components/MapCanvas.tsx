@@ -9,7 +9,7 @@ import {InfoCard} from './InfoCard'
 import {urlFor} from '@/lib/sanity/image'
 import {trackColor} from '@/lib/track-color'
 import type {LayerFilters} from './MapLayers'
-import {lineCoordinates, type MapData, PinKind, SelectedItem} from '@/lib/sanity/types'
+import {lineCoordinates, type MapData, type PinDoc, PinKind, SelectedItem} from '@/lib/sanity/types'
 import type {StyleSpecification} from 'maplibre-gl'
 
 const ESRI_ATTRIBUTION =
@@ -70,6 +70,51 @@ function selectionPoint(data: MapData, selected: SelectedItem): [number, number]
   const track = data.tracks.find((item) => item._id === selected.id)
   if (!track) return null
   return lineCoordinates(track.route)[0] ?? null
+}
+
+const MARKER_PX = 30
+
+/**
+ * Pins whose thumbnails overlap the clicked one on screen (and anything
+ * overlapping those, so a whole pile is treated as one group).
+ */
+function overlappingPins(map: MapLibreMap, pins: PinDoc[], origin: PinDoc): PinDoc[] {
+  const canvas = map.getCanvas()
+  const w = canvas.clientWidth
+  const h = canvas.clientHeight
+  const visible = pins
+    .map((pin) => ({pin, pt: map.project([pin.location.lng, pin.location.lat])}))
+    .filter(({pt}) => pt.x > -MARKER_PX && pt.y > -MARKER_PX && pt.x < w + MARKER_PX && pt.y < h + MARKER_PX)
+  const start = visible.find((item) => item.pin._id === origin._id)
+  if (!start) return [origin]
+  const group = new Set([start])
+  const queue = [start]
+  while (queue.length) {
+    const current = queue.pop()!
+    for (const other of visible) {
+      if (group.has(other)) continue
+      if (Math.abs(other.pt.x - current.pt.x) < MARKER_PX && Math.abs(other.pt.y - current.pt.y) < MARKER_PX) {
+        group.add(other)
+        queue.push(other)
+      }
+    }
+  }
+  return [...group].map((item) => item.pin)
+}
+
+/** Zoom into a pile of overlapping pins; returns false when zooming won't help. */
+function zoomIntoPile(map: MapLibreMap, group: PinDoc[]): boolean {
+  if (group.length < 2) return false
+  const bounds = new LngLatBounds()
+  for (const pin of group) bounds.extend([pin.location.lng, pin.location.lat])
+  const sw = bounds.getSouthWest()
+  const ne = bounds.getNorthEast()
+  // Every pin at (almost) the same spot: zooming can't separate them.
+  if (Math.abs(ne.lng - sw.lng) < 1e-5 && Math.abs(ne.lat - sw.lat) < 1e-5) return false
+  const camera = map.cameraForBounds(bounds, {padding: 96, maxZoom: 18})
+  if (!camera || camera.zoom == null || camera.zoom <= map.getZoom() + 0.3) return false
+  map.easeTo({center: camera.center, zoom: camera.zoom, duration: 650})
+  return true
 }
 
 function hitLayerIds(map: MapLibreMap): string[] {
@@ -222,7 +267,7 @@ export function MapCanvas({data, filters, selected, onSelect, onMapError}: Props
     const popup = new Popup({
       closeButton: false,
       closeOnClick: false,
-      offset: 8,
+      offset: 14,
       maxWidth: '320px',
       className: 'tv-popup',
       anchor: 'bottom',
@@ -363,6 +408,7 @@ function syncMap(
       el.style.cursor = 'pointer'
       el.addEventListener('click', (event) => {
         event.stopPropagation()
+        if (zoomIntoPile(map, overlappingPins(map, data.pins, pin))) return
         onSelect({kind: 'pin', id: pin._id})
       })
       const marker = new Marker({element: el, anchor: 'center'})
