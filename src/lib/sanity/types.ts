@@ -72,7 +72,7 @@ export type PinDoc = {
   kind: PinKind
   note?: string
   at?: string
-  /** Shot with a drone: spotted from a DJI file name, or ticked by hand in the Studio. */
+  /** Shot with a drone: spotted from a DJI file name, unless switched on or off by hand in the Studio. */
   isDrone?: boolean
   location: Geopoint
   photo?: {

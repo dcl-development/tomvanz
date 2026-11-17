@@ -19,7 +19,7 @@ export const mapQuery = defineQuery(`{
       at,
       location,
       photo,
-      "isDrone": drone == true || photo.asset->originalFilename match "DJI_*"
+      "isDrone": coalesce(drone, photo.asset->originalFilename match "DJI_*", false)
     }
     +
     *[_type == "photo" && defined(location.lat) && defined(location.lng) && defined(image.asset)] {
@@ -30,7 +30,7 @@ export const mapQuery = defineQuery(`{
       "at": takenAt,
       location,
       "photo": image,
-      "isDrone": drone == true || image.asset->originalFilename match "DJI_*"
+      "isDrone": coalesce(drone, image.asset->originalFilename match "DJI_*", false)
     }
   ) | order(at desc)
 }`)

@@ -1,6 +1,8 @@
 import {defineField, defineType} from 'sanity'
 import {CatchImageInput} from '../components/CatchImageInput'
+import {DroneInput} from '../components/DroneInput'
 import {MapGeopointInput} from '../components/MapGeopointInput'
+import {effectiveDrone} from '../../lib/drone'
 
 export const photo = defineType({
   name: 'photo',
@@ -54,7 +56,8 @@ export const photo = defineType({
       title: 'Drone photo',
       type: 'boolean',
       description:
-        'Drone photos are spotted automatically from their DJI file names. Turn this on for one that was renamed along the way.',
+        'Spotted automatically from DJI file names. Switch it on for one that has no drone file name (a screenshot, say), or off if it was spotted by mistake.',
+      components: {input: DroneInput},
     }),
   ],
   preview: {
@@ -66,7 +69,7 @@ export const photo = defineType({
       fileName: 'image.asset.originalFilename',
     },
     prepare({fish, media, lat, drone, fileName}) {
-      const isDrone = drone === true || /^DJI_/i.test(fileName ?? '')
+      const isDrone = effectiveDrone(drone, fileName)
       const where = lat == null ? 'No location — off the map' : undefined
       return {
         title: fish || 'Trip',

@@ -28,7 +28,7 @@ export const structure: StructureResolver = (S) =>
           S.documentList()
             .title('Drone photos')
             .filter(
-              '(_type == "pin" && (drone == true || photo.asset->originalFilename match "DJI_*")) || (_type == "photo" && (drone == true || image.asset->originalFilename match "DJI_*"))',
+              '(_type == "pin" && coalesce(drone, photo.asset->originalFilename match "DJI_*", false)) || (_type == "photo" && coalesce(drone, image.asset->originalFilename match "DJI_*", false))',
             )
             .apiVersion('2026-01-01'),
         ),
