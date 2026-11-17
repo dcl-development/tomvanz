@@ -42,6 +42,8 @@ type Props = {
   data: MapData
   filters: LayerFilters
   threeD: boolean
+  /** The person tilted the map by hand while 3D was off, so 3D should switch on. */
+  onThreeDGesture: () => void
   selected: SelectedItem | null
   /** A pin to outline on the map without selecting it (the card being viewed in the pile strip). */
   highlightId: string | null
@@ -82,8 +84,15 @@ const DEM_SOURCE_ID = 'terrain-dem'
 const TILT_PITCH = 62
 const TERRAIN_EXAGGERATION = 1.4
 
-/** Turn 3D terrain on or off. The elevation source is only added the first time it's needed. */
-function applyThreeD(map: MapLibreMap, on: boolean) {
+/** A hand-made tilt past this many degrees counts as asking for 3D. */
+const GESTURE_TILT_DEGREES = 6
+
+/**
+ * Turn 3D terrain on or off. The elevation source is only added the first time it's needed.
+ * `tilt` eases the camera to the preset angle; it's skipped when the person is already
+ * tilting the map themselves.
+ */
+function applyThreeD(map: MapLibreMap, on: boolean, tilt = true) {
   if (on) {
     if (!map.getSource(DEM_SOURCE_ID)) {
       map.addSource(DEM_SOURCE_ID, {
@@ -105,7 +114,7 @@ function applyThreeD(map: MapLibreMap, on: boolean) {
       'horizon-fog-blend': 0.7,
       'fog-ground-blend': 0.2,
     })
-    map.easeTo({pitch: TILT_PITCH, duration: 900})
+    if (tilt) map.easeTo({pitch: TILT_PITCH, duration: 900})
   } else {
     map.easeTo({pitch: 0, bearing: 0, duration: 700})
     map.once('moveend', () => {
@@ -190,12 +199,25 @@ function hitLayerIds(map: MapLibreMap): string[] {
     .filter((id) => id.startsWith('track-hit-'))
 }
 
-export function MapCanvas({data, filters, threeD, selected, highlightId, onSelect, onPile, onMapError}: Props) {
+export function MapCanvas({
+  data,
+  filters,
+  threeD,
+  onThreeDGesture,
+  selected,
+  highlightId,
+  onSelect,
+  onPile,
+  onMapError,
+}: Props) {
   const rootRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<MapLibreMap | null>(null)
   const markersRef = useRef<Map<string, Marker>>(new Map())
   const onSelectRef = useRef(onSelect)
   const onPileRef = useRef(onPile)
+  const onThreeDGestureRef = useRef(onThreeDGesture)
+  /** Set while 3D is being switched on by a tilt gesture, so the toggle doesn't also snap the camera. */
+  const gestureEnabledRef = useRef(false)
   const activeIdRef = useRef<string | null>(null)
   /** True once the map's style has loaded; unlike map.loaded() it stays true while tiles download. */
   const readyRef = useRef(false)
@@ -209,11 +231,12 @@ export function MapCanvas({data, filters, threeD, selected, highlightId, onSelec
     selectedRef.current = selected
     onSelectRef.current = onSelect
     onPileRef.current = onPile
+    onThreeDGestureRef.current = onThreeDGesture
     onMapErrorRef.current = onMapError
     dataRef.current = data
     filtersRef.current = filters
     threeDRef.current = threeD
-  }, [selected, onSelect, onPile, onMapError, data, filters, threeD])
+  }, [selected, onSelect, onPile, onThreeDGesture, onMapError, data, filters, threeD])
 
   const pinCtx = (): PinRenderCtx => ({
     data: dataRef.current,
@@ -287,6 +310,14 @@ export function MapCanvas({data, filters, threeD, selected, highlightId, onSelec
       attrib?.removeAttribute('open')
     })
     map.on('moveend', () => renderPins(map, pinCtx(), markersRef, false))
+    // Tilting the map by hand (right-click or Ctrl drag, two-finger tilt) is asking for 3D.
+    // Only gestures count: programmatic moves have no originalEvent.
+    map.on('pitch', (event) => {
+      if (!event.originalEvent || threeDRef.current || gestureEnabledRef.current) return
+      if (map.getPitch() < GESTURE_TILT_DEGREES) return
+      gestureEnabledRef.current = true
+      onThreeDGestureRef.current()
+    })
 
     return () => {
       markersRef.current.forEach((marker) => marker.remove())
@@ -305,7 +336,9 @@ export function MapCanvas({data, filters, threeD, selected, highlightId, onSelec
     }
     const map = mapRef.current
     if (!map || !readyRef.current) return
-    applyThreeD(map, threeD)
+    const tilt = !gestureEnabledRef.current
+    gestureEnabledRef.current = false
+    applyThreeD(map, threeD, tilt)
   }, [threeD])
 
   useEffect(() => {
