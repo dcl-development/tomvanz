@@ -16,6 +16,7 @@ type Props = {
   state: MapFilterState
   onChange: (next: MapFilterState) => void
   typeOptions: TypeOption[]
+  hasDrone: boolean
   years: string[]
   results: ResultItem[]
   total: number
@@ -35,7 +36,7 @@ function formatDate(value?: string) {
   return date.toLocaleDateString(undefined, {year: 'numeric', month: 'short', day: 'numeric'})
 }
 
-export function MapSearch({state, onChange, typeOptions, years, results, total, onPick}: Props) {
+export function MapSearch({state, onChange, typeOptions, hasDrone, years, results, total, onPick}: Props) {
   const [open, setOpen] = useState(false)
   const count = activeFilterCount(state)
 
@@ -90,8 +91,13 @@ export function MapSearch({state, onChange, typeOptions, years, results, total, 
           </div>
 
           <div className="space-y-2.5 px-4 pb-3">
-            {typeOptions.length > 1 ? (
+            {typeOptions.length > 1 || hasDrone ? (
               <Chips>
+                {hasDrone ? (
+                  <Chip active={state.drone} onClick={() => onChange({...state, drone: !state.drone})}>
+                    Drone photos
+                  </Chip>
+                ) : null}
                 {typeOptions.map((option) => (
                   <Chip
                     key={option.value}

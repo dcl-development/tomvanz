@@ -1,6 +1,8 @@
 import {defineField, defineType} from 'sanity'
 import {CatchImageInput} from '../components/CatchImageInput'
+import {DroneInput} from '../components/DroneInput'
 import {MapGeopointInput} from '../components/MapGeopointInput'
+import {effectiveDrone} from '../../lib/drone'
 
 export const pin = defineType({
   name: 'pin',
@@ -59,17 +61,28 @@ export const pin = defineType({
       title: 'Date',
       type: 'datetime',
     }),
+    defineField({
+      name: 'drone',
+      title: 'Drone photo',
+      type: 'boolean',
+      description:
+        'Spotted automatically from DJI file names. Switch it on for one that has no drone file name (a screenshot, say), or off if it was spotted by mistake.',
+      components: {input: DroneInput},
+    }),
   ],
   preview: {
     select: {
       title: 'title',
       kind: 'kind',
       media: 'photo',
+      drone: 'drone',
+      fileName: 'photo.asset.originalFilename',
     },
-    prepare({title, kind, media}) {
+    prepare({title, kind, media, drone, fileName}) {
+      const isDrone = effectiveDrone(drone, fileName)
       return {
         title: title || 'Pin',
-        subtitle: kind,
+        subtitle: isDrone ? `${kind} · Drone` : kind,
         media,
       }
     },

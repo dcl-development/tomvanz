@@ -20,4 +20,16 @@ export const structure: StructureResolver = (S) =>
             .filter('_type in ["pin", "photo"]')
             .apiVersion('2026-01-01'),
         ),
+      S.listItem()
+        .title('Drone photos')
+        .id('dronePhotos')
+        .schemaType('pin')
+        .child(
+          S.documentList()
+            .title('Drone photos')
+            .filter(
+              '(_type == "pin" && coalesce(drone, photo.asset->originalFilename match "DJI_*", false)) || (_type == "photo" && coalesce(drone, image.asset->originalFilename match "DJI_*", false))',
+            )
+            .apiVersion('2026-01-01'),
+        ),
     ])

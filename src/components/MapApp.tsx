@@ -143,6 +143,7 @@ export function MapApp({data: allData, initialSelected = null}: Props) {
           state={mapFilters}
           onChange={setMapFilters}
           typeOptions={options.typeOptions}
+          hasDrone={options.hasDrone}
           years={options.years}
           results={results}
           total={allData.pins.length + allData.tracks.length}

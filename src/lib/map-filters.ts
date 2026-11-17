@@ -7,10 +7,12 @@ export type MapFilterState = {
   /** Empty means "everything". Values like `pin:trip` or `track:hike`. */
   types: string[]
   year: string | null
+  /** Only photos shot with a drone. */
+  drone: boolean
   sort: SortMode
 }
 
-export const emptyMapFilters: MapFilterState = {query: '', types: [], year: null, sort: 'newest'}
+export const emptyMapFilters: MapFilterState = {query: '', types: [], year: null, drone: false, sort: 'newest'}
 
 export type TypeOption = {value: string; label: string}
 
@@ -65,15 +67,16 @@ export function filterOptions(data: MapData) {
     const y = yearOf(track.startedAt)
     if (y) years.add(y)
   }
-  return {typeOptions, years: [...years].sort((a, b) => Number(b) - Number(a))}
+  const hasDrone = data.pins.some((pin) => pin.isDrone)
+  return {typeOptions, hasDrone, years: [...years].sort((a, b) => Number(b) - Number(a))}
 }
 
 export function filtersActive(state: MapFilterState) {
-  return state.query.trim() !== '' || state.types.length > 0 || state.year !== null
+  return state.query.trim() !== '' || state.types.length > 0 || state.year !== null || state.drone
 }
 
 export function activeFilterCount(state: MapFilterState) {
-  return (state.query.trim() ? 1 : 0) + state.types.length + (state.year ? 1 : 0)
+  return (state.query.trim() ? 1 : 0) + state.types.length + (state.year ? 1 : 0) + (state.drone ? 1 : 0)
 }
 
 function matchesQuery(query: string, ...fields: (string | undefined)[]) {
@@ -90,11 +93,14 @@ export function applyMapFilters(data: MapData, state: MapFilterState): MapData {
     pins: data.pins.filter(
       (pin) =>
         typeOk(pinType(pin)) &&
+        (!state.drone || pin.isDrone === true) &&
         (!state.year || yearOf(pin.at) === state.year) &&
         matchesQuery(state.query, pin.title, pin.note, PIN_LABELS[pin.kind]),
     ),
+    // Routes aren't photos, so they drop out when only drone photos are wanted.
     tracks: data.tracks.filter(
       (track) =>
+        !state.drone &&
         typeOk(trackType(track)) &&
         (!state.year || yearOf(track.startedAt) === state.year) &&
         matchesQuery(state.query, track.title, TRACK_LABELS[track.activity]),
