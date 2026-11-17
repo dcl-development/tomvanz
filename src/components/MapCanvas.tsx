@@ -7,6 +7,7 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 import '@/lib/maplibre-worker'
 import {InfoCard} from './InfoCard'
 import {urlFor} from '@/lib/sanity/image'
+import {PILE_FIT_MAX_ZOOM, pileTolerancePx} from '@/lib/pile'
 import {trackColor} from '@/lib/track-color'
 import type {LayerFilters} from './MapLayers'
 import {lineCoordinates, type MapData, type PinDoc, PinKind, SelectedItem} from '@/lib/sanity/types'
@@ -77,8 +78,6 @@ function selectionPoint(data: MapData, selected: SelectedItem): [number, number]
   return lineCoordinates(track.route)[0] ?? null
 }
 
-const MARKER_PX = 30
-
 const DEM_SOURCE_ID = 'terrain-dem'
 const TILT_PITCH = 62
 const TERRAIN_EXAGGERATION = 1.4
@@ -122,10 +121,11 @@ function applyThreeD(map: MapLibreMap, on: boolean) {
  */
 function overlappingPins(map: MapLibreMap, pins: PinDoc[], origin: PinDoc): PinDoc[] {
   const here = map.project([origin.location.lng, origin.location.lat])
+  const tolerance = pileTolerancePx(map.getZoom())
   return pins.filter((pin) => {
     if (pin._id === origin._id) return true
     const pt = map.project([pin.location.lng, pin.location.lat])
-    return Math.abs(pt.x - here.x) < MARKER_PX && Math.abs(pt.y - here.y) < MARKER_PX
+    return Math.abs(pt.x - here.x) < tolerance && Math.abs(pt.y - here.y) < tolerance
   })
 }
 
@@ -141,7 +141,7 @@ function zoomIntoPile(map: MapLibreMap, group: PinDoc[]) {
   if (Math.abs(ne.lng - sw.lng) < 1e-5 && Math.abs(ne.lat - sw.lat) < 1e-5) return
   const camera = map.cameraForBounds(bounds, {
     padding: {top: 96, bottom: 270, left: 96, right: 96},
-    maxZoom: 18,
+    maxZoom: PILE_FIT_MAX_ZOOM,
   })
   if (!camera || camera.zoom == null || camera.zoom <= map.getZoom() + 0.3) return
   map.easeTo({center: camera.center, zoom: camera.zoom, duration: 650})
