@@ -3,7 +3,6 @@
 import {useCallback, useDeferredValue, useEffect, useMemo, useRef, useState} from 'react'
 import dynamic from 'next/dynamic'
 import {MapLayers, type LayerFilters} from './MapLayers'
-import {InfoCard} from './InfoCard'
 import {MapSearch} from './MapSearch'
 import {PileStrip} from './PileStrip'
 import {lineMiles} from '@/lib/geo'
@@ -182,11 +181,6 @@ export function MapApp({data: allData, initialSelected = null}: Props) {
           onOpen={(id) => select({kind: 'pin', id})}
           onClose={() => select(null)}
         />
-      ) : null}
-      {card ? (
-        <div className="md:hidden">
-          <InfoCard data={data} selected={card} onClose={() => select(null)} placement="sheet" />
-        </div>
       ) : null}
     </div>
   )

@@ -1,6 +1,6 @@
 'use client'
 
-import {useEffect, useRef, useState} from 'react'
+import {useEffect, useRef} from 'react'
 import {createRoot, type Root} from 'react-dom/client'
 import {LngLatBounds, Map as MapLibreMap, Marker, NavigationControl, Popup} from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
@@ -152,7 +152,6 @@ function focusSelection(
   map: MapLibreMap,
   data: MapData,
   selected: SelectedItem,
-  popupMode: boolean,
   duration: number,
 ) {
   if (selected.kind === 'track') {
@@ -164,9 +163,7 @@ function focusSelection(
     if (bounds.isEmpty()) return
     map.fitBounds(bounds, {
       // The card opens above the route's start, so leave it room (it's taller for routes with an elevation chart).
-      padding: popupMode
-        ? {top: Math.min(500, Math.round(map.getContainer().clientHeight * 0.7)), bottom: 60, left: 70, right: 70}
-        : {top: 90, bottom: 360, left: 40, right: 40},
+      padding: {top: Math.min(500, Math.round(map.getContainer().clientHeight * 0.7)), bottom: 60, left: 40, right: 40},
       maxZoom: 15,
       duration,
     })
@@ -176,10 +173,15 @@ function focusSelection(
   if (!point) return
   map.easeTo({
     center: point,
-    offset: [0, popupMode ? 110 : -40],
+    offset: [0, pinDrop(map)],
     zoom: Math.max(map.getZoom(), 11),
     duration,
   })
+}
+
+/** How far below the map's centre a selected photo sits, leaving room for its card above it. */
+function pinDrop(map: MapLibreMap) {
+  return Math.min(170, Math.round(map.getContainer().clientHeight * 0.24))
 }
 
 function hitLayerIds(map: MapLibreMap): string[] {
@@ -198,12 +200,10 @@ export function MapCanvas({data, filters, threeD, selected, highlightId, onSelec
   /** True once the map's style has loaded; unlike map.loaded() it stays true while tiles download. */
   const readyRef = useRef(false)
   const selectedRef = useRef(selected)
-  const popupModeRef = useRef(true)
   const onMapErrorRef = useRef(onMapError)
   const dataRef = useRef(data)
   const filtersRef = useRef(filters)
   const threeDRef = useRef(threeD)
-  const [popupMode, setPopupMode] = useState(() => window.matchMedia('(min-width: 768px)').matches)
 
   useEffect(() => {
     selectedRef.current = selected
@@ -222,17 +222,6 @@ export function MapCanvas({data, filters, threeD, selected, highlightId, onSelec
     onPile: onPileRef.current,
     getActiveId: () => activeIdRef.current,
   })
-
-  useEffect(() => {
-    const mq = window.matchMedia('(min-width: 768px)')
-    const update = () => {
-      popupModeRef.current = mq.matches
-      setPopupMode(mq.matches)
-    }
-    update()
-    mq.addEventListener('change', update)
-    return () => mq.removeEventListener('change', update)
-  }, [])
 
   useEffect(() => {
     const node = rootRef.current
@@ -289,7 +278,7 @@ export function MapCanvas({data, filters, threeD, selected, highlightId, onSelec
       readyRef.current = true
       syncMap(map, dataRef.current, filtersRef.current, pinCtx(), markersRef)
       if (selectedRef.current) {
-        focusSelection(map, dataRef.current, selectedRef.current, popupModeRef.current, 0)
+        focusSelection(map, dataRef.current, selectedRef.current, 0)
       }
       if (threeDRef.current) applyThreeD(map, true)
       // Start with the credits collapsed to a small (i) button; they still open on tap.
@@ -348,31 +337,32 @@ export function MapCanvas({data, filters, threeD, selected, highlightId, onSelec
   useEffect(() => {
     const map = mapRef.current
     if (!map || !readyRef.current || !selected) return
-    focusSelection(map, data, selected, popupMode, 500)
-  }, [selected, popupMode, data])
+    focusSelection(map, data, selected, 500)
+  }, [selected, data])
 
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !popupMode || !selected) return
+    if (!map || !selected) return
     const lngLat = selectionPoint(data, selected)
     if (!lngLat) return
 
     const node = document.createElement('div')
+    // The card can be at most as tall as the space above the photo, then it scrolls.
+    node.style.setProperty('--card-max', `${Math.max(220, Math.round(map.getContainer().clientHeight / 2 + pinDrop(map) - 56))}px`)
     const root: Root = createRoot(node)
     root.render(
       <InfoCard
         data={data}
         selected={selected}
         onClose={() => onSelectRef.current(null)}
-        placement="popup"
       />,
     )
 
     const popup = new Popup({
       closeButton: false,
       closeOnClick: false,
-      offset: 14,
-      maxWidth: '320px',
+      offset: 30,
+      maxWidth: 'none',
       className: 'tv-popup',
       anchor: 'bottom',
       focusAfterOpen: false,
@@ -381,11 +371,32 @@ export function MapCanvas({data, filters, threeD, selected, highlightId, onSelec
       .setDOMContent(node)
       .addTo(map)
 
+    // Keep the card fully on screen: on a phone it's nearly as wide as the map, so slide it
+    // sideways when the photo it belongs to is off-centre.
+    const content = popup.getElement().querySelector<HTMLElement>('.maplibregl-popup-content')
+    const keepOnScreen = () => {
+      if (!content) return
+      content.style.translate = '0px 0px'
+      const card = content.getBoundingClientRect()
+      const view = map.getContainer().getBoundingClientRect()
+      const margin = 12
+      let dx = 0
+      if (card.left < view.left + margin) dx = view.left + margin - card.left
+      else if (card.right > view.right - margin) dx = view.right - margin - card.right
+      content.style.translate = `${Math.round(dx)}px 0px`
+    }
+    map.on('move', keepOnScreen)
+    const resizeWatcher = new ResizeObserver(keepOnScreen)
+    resizeWatcher.observe(node)
+    requestAnimationFrame(keepOnScreen)
+
     return () => {
+      map.off('move', keepOnScreen)
+      resizeWatcher.disconnect()
       popup.remove()
       queueMicrotask(() => root.unmount())
     }
-  }, [selected, data, popupMode])
+  }, [selected, data])
 
   return <div ref={rootRef} className="isolate h-full w-full" />
 }

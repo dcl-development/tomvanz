@@ -13,7 +13,6 @@ type Props = {
   data: MapData
   selected: SelectedItem
   onClose: () => void
-  placement: 'sheet' | 'popup'
 }
 
 type CardModel = {
@@ -127,7 +126,7 @@ function Lightbox({url, alt, onClose}: {url: string; alt: string; onClose: () =>
   )
 }
 
-export function InfoCard({data, selected, onClose, placement}: Props) {
+export function InfoCard({data, selected, onClose}: Props) {
   const [expanded, setExpanded] = useState(false)
   const [copied, setCopied] = useState(false)
   const track = selected.kind === 'track' ? data.tracks.find((item) => item._id === selected.id) : undefined
@@ -156,9 +155,7 @@ export function InfoCard({data, selected, onClose, placement}: Props) {
   }
 
   const frame =
-    placement === 'sheet'
-      ? 'tv-card tv-sheet absolute inset-x-0 bottom-0 z-20 max-h-[78vh] overflow-auto rounded-t-[28px] bg-white pb-[env(safe-area-inset-bottom)] shadow-[0_-12px_48px_rgba(0,0,0,0.25)]'
-      : 'tv-card w-[340px] overflow-hidden rounded-[22px] bg-white shadow-[0_24px_64px_rgba(0,0,0,0.3)] ring-1 ring-black/5'
+    'tv-card w-[min(340px,calc(100vw-24px))] max-h-[var(--card-max,520px)] overflow-y-auto overflow-x-hidden rounded-[22px] bg-white shadow-[0_24px_64px_rgba(0,0,0,0.3)] ring-1 ring-black/5'
 
   // An untitled photo leads with its date instead of leaving a blank headline.
   const untitled = card.title.trim() === ''
@@ -207,11 +204,6 @@ export function InfoCard({data, selected, onClose, placement}: Props) {
           <div className="pointer-events-none absolute inset-x-0 bottom-0 h-3/5 bg-gradient-to-t from-black/75 via-black/30 to-transparent" />
         ) : null}
 
-        {placement === 'sheet' ? (
-          <div className="pointer-events-none absolute inset-x-0 top-2 flex justify-center">
-            <div className="h-1 w-10 rounded-full bg-white/70 shadow-sm" />
-          </div>
-        ) : null}
 
         <button
           type="button"
