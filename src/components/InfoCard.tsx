@@ -1,5 +1,7 @@
 'use client'
 
+import {useEffect, useState} from 'react'
+import {createPortal} from 'react-dom'
 import {PinShape} from './shapes'
 import {formatMiles, lineMiles} from '@/lib/geo'
 import {urlFor} from '@/lib/sanity/image'
@@ -19,6 +21,7 @@ type CardModel = {
   stats: string[]
   body: string | null
   imageUrl: string | null
+  fullUrl: string | null
   imageAlt: string
   accent: string
   kind: PinKind | null
@@ -60,8 +63,9 @@ function cardModel(data: MapData, selected: SelectedItem): CardModel | null {
       stats,
       body: null,
       imageUrl: track.photo?.asset
-        ? urlFor(track.photo).width(900).height(560).fit('crop').url()
+        ? urlFor(track.photo).width(1000).height(750).fit('crop').url()
         : null,
+      fullUrl: track.photo?.asset ? urlFor(track.photo).width(2400).fit('max').url() : null,
       imageAlt: track.title,
       accent: trackColor(track.activity),
       kind: null,
@@ -78,8 +82,9 @@ function cardModel(data: MapData, selected: SelectedItem): CardModel | null {
     stats: when ? [when] : [],
     body: pin.note ?? null,
     imageUrl: pin.photo?.asset
-      ? urlFor(pin.photo).width(900).height(560).fit('crop').url()
+      ? urlFor(pin.photo).width(1000).height(750).fit('crop').url()
       : null,
+    fullUrl: pin.photo?.asset ? urlFor(pin.photo).width(2400).fit('max').url() : null,
     imageAlt: pin.title,
     accent: '#111',
     kind: pin.kind,
@@ -87,39 +92,77 @@ function cardModel(data: MapData, selected: SelectedItem): CardModel | null {
   }
 }
 
+function Lightbox({url, alt, onClose}: {url: string; alt: string; onClose: () => void}) {
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.stopPropagation()
+        onClose()
+      }
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [onClose])
+
+  return createPortal(
+    <div
+      role="dialog"
+      aria-label={alt}
+      onClick={onClose}
+      className="tv-lightbox fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4 backdrop-blur-sm"
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={url} alt={alt} className="max-h-full max-w-full rounded-lg object-contain" />
+      <button
+        type="button"
+        aria-label="Close photo"
+        onClick={onClose}
+        className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/15 text-[22px] leading-none text-white backdrop-blur-md transition hover:bg-white/25"
+      >
+        ×
+      </button>
+    </div>,
+    document.body,
+  )
+}
+
 export function InfoCard({data, selected, onClose, placement}: Props) {
+  const [expanded, setExpanded] = useState(false)
   const card = cardModel(data, selected)
   if (!card) return null
 
   const frame =
     placement === 'sheet'
-      ? 'tv-card absolute inset-x-0 bottom-0 z-20 max-h-[58vh] overflow-auto rounded-t-2xl bg-white shadow-[0_-8px_32px_rgba(0,0,0,0.18)]'
-      : 'tv-card w-[300px] overflow-hidden rounded-2xl bg-white shadow-[0_12px_40px_rgba(0,0,0,0.22)]'
+      ? 'tv-card tv-sheet absolute inset-x-0 bottom-0 z-20 max-h-[78vh] overflow-auto rounded-t-[28px] bg-white pb-[env(safe-area-inset-bottom)] shadow-[0_-12px_48px_rgba(0,0,0,0.25)]'
+      : 'tv-card w-[340px] overflow-hidden rounded-[22px] bg-white shadow-[0_24px_64px_rgba(0,0,0,0.3)] ring-1 ring-black/5'
+
+  const hasDetails = card.stats.length > 0 || Boolean(card.body)
 
   return (
     <article className={frame}>
-      {placement === 'sheet' ? (
-        <div className="flex justify-center bg-white pt-2">
-          <div className="h-1 w-10 rounded-full bg-black/15" />
-        </div>
-      ) : null}
-
-      <div className="relative aspect-[16/10] overflow-hidden bg-neutral-200">
+      <div className="relative aspect-[4/3] overflow-hidden bg-neutral-200">
         {card.imageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={card.imageUrl} alt={card.imageAlt} className="h-full w-full object-cover" />
+          <button
+            type="button"
+            onClick={() => setExpanded(true)}
+            aria-label="View photo full size"
+            className="block h-full w-full cursor-zoom-in"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={card.imageUrl}
+              alt={card.imageAlt}
+              className="h-full w-full object-cover transition-transform duration-500 hover:scale-[1.03]"
+            />
+          </button>
         ) : (
           <div
             className="absolute inset-0"
             style={{background: `linear-gradient(160deg, ${card.accent} 0%, #1a1a1a 78%)`}}
           >
-            <svg
-              viewBox="0 0 300 188"
-              className="absolute inset-0 h-full w-full opacity-40"
-              aria-hidden
-            >
+            <svg viewBox="0 0 300 225" className="absolute inset-0 h-full w-full opacity-30" aria-hidden>
               <path
-                d="M18 140 C70 40, 120 150, 170 70 S250 40, 286 110"
+                d="M18 160 C70 50, 120 170, 170 80 S250 50, 286 130"
                 fill="none"
                 stroke="white"
                 strokeWidth="6"
@@ -127,40 +170,62 @@ export function InfoCard({data, selected, onClose, placement}: Props) {
                 strokeDasharray={card.dashed ? '14 12' : undefined}
               />
             </svg>
-            {card.kind ? (
-              <PinShape kind={card.kind} className="absolute bottom-3 left-3 h-7 w-7 text-white" />
-            ) : null}
           </div>
         )}
+
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-3/5 bg-gradient-to-t from-black/75 via-black/30 to-transparent" />
+
+        {placement === 'sheet' ? (
+          <div className="pointer-events-none absolute inset-x-0 top-2 flex justify-center">
+            <div className="h-1 w-10 rounded-full bg-white/70 shadow-sm" />
+          </div>
+        ) : null}
+
         <button
           type="button"
           onClick={onClose}
           aria-label="Close"
-          className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-white text-[18px] leading-none text-black shadow-sm"
+          className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/35 text-[20px] leading-none text-white backdrop-blur-md transition hover:bg-black/50 active:scale-95"
         >
           ×
         </button>
+
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 p-4 text-white">
+          <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/75">
+            {card.kind ? <PinShape kind={card.kind} className="h-3.5 w-3.5 text-white" /> : null}
+            {card.eyebrow}
+          </p>
+          <h2 className="mt-1 text-[24px] font-bold leading-[1.1] tracking-tight [text-shadow:0_1px_12px_rgba(0,0,0,0.35)]">
+            {card.title}
+          </h2>
+        </div>
       </div>
 
-      <div className="px-4 pb-4 pt-3">
-        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-black/40">{card.eyebrow}</p>
-        <h2 className="mt-1 text-[22px] font-bold leading-tight tracking-tight">{card.title}</h2>
-        {card.stats.length > 0 ? (
-          <div className="mt-2.5 flex flex-wrap gap-1.5">
-            {card.stats.map((stat) => (
-              <span
-                key={stat}
-                className="rounded-full bg-black/[0.06] px-2.5 py-1 text-[12px] text-black/70"
-              >
-                {stat}
-              </span>
-            ))}
-          </div>
-        ) : null}
-        {card.body ? (
-          <p className="mt-3 text-[14px] leading-snug text-black/70">{card.body}</p>
-        ) : null}
-      </div>
+      {hasDetails ? (
+        <div className="px-4 pb-4 pt-3.5">
+          {card.stats.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5">
+              {card.stats.map((stat) => (
+                <span
+                  key={stat}
+                  className="rounded-full bg-black/[0.06] px-3 py-1 text-[12px] font-medium text-black/70"
+                >
+                  {stat}
+                </span>
+              ))}
+            </div>
+          ) : null}
+          {card.body ? (
+            <p className={`${card.stats.length ? 'mt-3' : ''} text-[14px] leading-relaxed text-black/70`}>
+              {card.body}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {expanded && card.fullUrl ? (
+        <Lightbox url={card.fullUrl} alt={card.imageAlt} onClose={() => setExpanded(false)} />
+      ) : null}
     </article>
   )
 }

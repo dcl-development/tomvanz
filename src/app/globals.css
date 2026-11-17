@@ -34,21 +34,55 @@ button {
   border-radius: 0;
 }
 
-.tv-popup.maplibregl-popup-anchor-bottom .maplibregl-popup-tip {
-  border-top-color: #fff;
+.tv-popup .maplibregl-popup-tip {
+  display: none;
 }
 
 @keyframes tv-card-in {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(14px) scale(0.97);
   }
   to {
     opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes tv-sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+  to {
     transform: translateY(0);
   }
 }
 
+@keyframes tv-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 .tv-card {
-  animation: tv-card-in 220ms ease-out;
+  animation: tv-card-in 280ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.tv-card.tv-sheet {
+  animation: tv-sheet-in 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.tv-lightbox {
+  animation: tv-fade-in 180ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tv-card,
+  .tv-card.tv-sheet,
+  .tv-lightbox {
+    animation: none;
+  }
 }
