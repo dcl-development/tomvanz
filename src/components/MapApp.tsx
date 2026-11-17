@@ -71,6 +71,9 @@ export function MapApp({data: allData, initialSelected = null, loadFailed = fals
     hintTimer.current = setTimeout(() => setHint(null), 5000)
   }
 
+  // Tilting the map by hand turns 3D on. No how-to hint: they clearly know how to move around.
+  const startThreeDFromGesture = useCallback(() => setThreeD(true), [])
+
   // Any new selection (or a tap on empty map) closes the pile strip.
   const select = useCallback((item: SelectedItem | null) => {
     setPileIds(null)
@@ -132,6 +135,7 @@ export function MapApp({data: allData, initialSelected = null, loadFailed = fals
           data={data}
           filters={filters}
           threeD={threeD}
+          onThreeDGesture={startThreeDFromGesture}
           selected={card}
           highlightId={pilePins?.[pileIndex]?._id ?? null}
           onSelect={select}
