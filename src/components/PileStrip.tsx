@@ -44,7 +44,7 @@ export function PileStrip({pins, onIndexChange, onOpen, onClose}: Props) {
   }
 
   return (
-    <div className="tv-strip pointer-events-none absolute inset-x-0 bottom-[124px] z-20 md:bottom-6 md:left-1/2 md:right-auto md:w-[640px] md:-translate-x-1/2">
+    <div className="tv-strip pointer-events-none absolute inset-x-0 bottom-[calc(16px+env(safe-area-inset-bottom))] z-20 md:bottom-6 md:left-1/2 md:right-auto md:w-[640px] md:-translate-x-1/2">
       <div className="mb-2 flex justify-center">
         <div className="pointer-events-auto flex items-center gap-1 rounded-full bg-black/80 py-1 pl-3.5 pr-1 text-[12px] font-semibold text-white shadow-lg backdrop-blur-md">
           <span>

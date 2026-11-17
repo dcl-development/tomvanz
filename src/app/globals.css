@@ -17,10 +17,35 @@ button {
   font-size: 10px;
 }
 
+.tv-pin {
+  display: block;
+  transition:
+    scale 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    filter 220ms ease;
+}
+
+/* The photo you're looking at lifts off the map: bigger, with a deep shadow. */
 button.maplibregl-marker[data-active='true'] {
-  outline: 2px solid #111;
-  outline-offset: 3px;
   z-index: 100000 !important;
+}
+
+button.maplibregl-marker[data-active='true'] .tv-pin {
+  scale: 1.9;
+  filter: drop-shadow(0 14px 14px rgba(0, 0, 0, 0.55)) drop-shadow(0 3px 5px rgba(0, 0, 0, 0.45));
+}
+
+/* On phones the card strip owns the bottom of the screen, so the zoom buttons and credits step aside. */
+@media (max-width: 767px) {
+  [data-strip='true'] .maplibregl-ctrl-bottom-right,
+  [data-strip='true'] .maplibregl-ctrl-bottom-left {
+    opacity: 0;
+    pointer-events: none;
+  }
+}
+
+.maplibregl-ctrl-bottom-right,
+.maplibregl-ctrl-bottom-left {
+  transition: opacity 180ms ease;
 }
 
 .tv-popup.maplibregl-popup {

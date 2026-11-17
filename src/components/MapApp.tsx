@@ -118,7 +118,10 @@ export function MapApp({data: allData, initialSelected = null}: Props) {
   const card = selectedStillVisible ? selected : null
 
   return (
-    <div className="relative h-full w-full overflow-hidden bg-[#e8e8e8]">
+    <div
+      className="relative h-full w-full overflow-hidden bg-[#e8e8e8]"
+      data-strip={pilePins && pilePins.length > 1 && !card ? 'true' : 'false'}
+    >
       {mapFailed ? (
         <div className="flex h-full items-center justify-center text-[14px] text-black/70">
           Couldn’t load the map.

@@ -140,7 +140,7 @@ function zoomIntoPile(map: MapLibreMap, group: PinDoc[]) {
   const ne = bounds.getNorthEast()
   if (Math.abs(ne.lng - sw.lng) < 1e-5 && Math.abs(ne.lat - sw.lat) < 1e-5) return
   const camera = map.cameraForBounds(bounds, {
-    padding: {top: 96, bottom: 280, left: 96, right: 96},
+    padding: {top: 96, bottom: 210, left: 96, right: 96},
     maxZoom: 18,
   })
   if (!camera || camera.zoom == null || camera.zoom <= map.getZoom() + 0.3) return
@@ -546,24 +546,31 @@ function renderPins(
     el.setAttribute('aria-label', pin.title)
     // Later pins sit on top, exactly as when every marker was added in order.
     el.style.zIndex = String(index)
+    // The button only positions the marker; the visible photo sits in an inner layer so the
+    // active photo can scale up without MapLibre's position transform being scaled with it.
+    const inner = document.createElement('span')
+    inner.className = 'tv-pin'
+    el.style.padding = '0'
+    el.style.border = '0'
+    el.style.background = 'transparent'
     if (thumb) {
       el.style.width = '28px'
       el.style.height = '28px'
-      el.style.padding = '0'
-      el.style.border = '1px solid white'
-      el.style.borderRadius = '2px'
-      el.style.boxShadow = '0 1px 4px rgba(0,0,0,0.28)'
-      el.style.backgroundImage = `url(${thumb})`
-      el.style.backgroundSize = 'cover'
-      el.style.backgroundPosition = 'center'
-      el.style.backgroundColor = '#111'
+      inner.style.width = '100%'
+      inner.style.height = '100%'
+      inner.style.boxSizing = 'border-box'
+      inner.style.border = '1px solid white'
+      inner.style.borderRadius = '2px'
+      inner.style.boxShadow = '0 1px 4px rgba(0,0,0,0.28)'
+      inner.style.backgroundImage = `url(${thumb})`
+      inner.style.backgroundSize = 'cover'
+      inner.style.backgroundPosition = 'center'
+      inner.style.backgroundColor = '#111'
     } else {
-      el.innerHTML = pinSvg(pin.kind)
-      el.style.background = 'transparent'
-      el.style.border = '0'
-      el.style.padding = '0'
+      inner.innerHTML = pinSvg(pin.kind)
       el.style.lineHeight = '0'
     }
+    el.appendChild(inner)
     el.style.cursor = 'pointer'
     el.addEventListener('click', (event) => {
       event.stopPropagation()
