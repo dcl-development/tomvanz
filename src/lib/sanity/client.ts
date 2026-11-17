@@ -6,4 +6,6 @@ export const client = createClient({
   dataset,
   apiVersion,
   useCdn: false,
+  // Fail fast: pages guard Sanity reads themselves (see load.ts) and retry once.
+  maxRetries: 1,
 })

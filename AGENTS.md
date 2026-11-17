@@ -31,7 +31,7 @@ Sanity project `lee2r8sa`, dataset `production` (hardcoded in `sanity.config.ts`
 
 ## Gotchas
 
-- Sanity reads are cached for 10 minutes (`src/lib/sanity/load.ts`; `/` is a pre-built page with `revalidate = 600`) so uptime pings never hit Sanity. Studio edits can take up to ~10 min to show on the site. Don't add uncached Sanity fetches to the layout or `/`.
+- Sanity reads go through `src/lib/sanity/load.ts`: cached 60s, timeout + one retry, and guarded so a Sanity outage can't break the site (a build with Sanity down still succeeds with an empty map and a notice; a failed refresh keeps the last good homepage). `/` is a pre-built page with `revalidate = 60`. Studio edits show within ~1 min. Don't add uncached or unguarded Sanity fetches to the layout or `/`. Point uptime monitors at `/api/health` (never touches Sanity).
 
 - GPX routes are stored as JSON text, not geopoint arrays.
 - "trip" is the current name (formerly "catch"); trip photos are folded into pins (no separate Photos layer).

@@ -7,10 +7,12 @@ export const metadata: Metadata = {
   title: 'Tom Vanz',
 }
 
-// A pre-built page, refreshed in the background at most every 10 minutes. Visits (and uptime
-// pings) are served from the cache and don't touch Sanity.
-export const revalidate = 600
+// A pre-built page, refreshed in the background at most once a minute. Visits (and uptime
+// pings) are served from the cache. If Sanity is down during a refresh, the last good page
+// keeps being served.
+export const revalidate = 60
 
 export default async function Home() {
-  return <MapApp data={await loadMapData()} />
+  const {data, failed} = await loadMapData({keepLastGood: true})
+  return <MapApp data={data} loadFailed={failed} />
 }

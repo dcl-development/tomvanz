@@ -32,7 +32,7 @@ function sharedItem(data: MapData, params: {[key: string]: string | string[] | u
 export async function generateMetadata({searchParams}: Props): Promise<Metadata> {
   const params = await searchParams
   if (!first(params.photo) && !first(params.track)) return {title: 'Tom Vanz'}
-  const shared = sharedItem(await loadMapData(), params)
+  const shared = sharedItem((await loadMapData()).data, params)
   if (!shared) return {title: 'Tom Vanz'}
   const image = shared.photo?.asset
     ? urlFor(shared.photo).width(1200).height(630).fit('crop').url()
@@ -45,7 +45,7 @@ export async function generateMetadata({searchParams}: Props): Promise<Metadata>
 }
 
 export default async function MapPage({searchParams}: Props) {
-  const data = await loadMapData()
+  const {data, failed} = await loadMapData()
   const shared = sharedItem(data, await searchParams)
-  return <MapApp data={data} initialSelected={shared?.selected ?? null} />
+  return <MapApp data={data} initialSelected={shared?.selected ?? null} loadFailed={failed} />
 }
