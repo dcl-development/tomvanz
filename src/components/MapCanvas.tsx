@@ -10,8 +10,32 @@ import {urlFor} from '@/lib/sanity/image'
 import {trackColor} from '@/lib/track-color'
 import type {LayerFilters} from './MapLayers'
 import {lineCoordinates, type MapData, PinKind, SelectedItem} from '@/lib/sanity/types'
+import type {StyleSpecification} from 'maplibre-gl'
 
-const STYLE = 'https://tiles.openfreemap.org/styles/positron'
+const ESRI_ATTRIBUTION =
+  'Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community'
+
+const STYLE: StyleSpecification = {
+  version: 8,
+  sources: {
+    'esri-world-imagery': {
+      type: 'raster',
+      tiles: [
+        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      ],
+      tileSize: 256,
+      maxzoom: 19,
+      attribution: ESRI_ATTRIBUTION,
+    },
+  },
+  layers: [
+    {
+      id: 'esri-world-imagery',
+      type: 'raster',
+      source: 'esri-world-imagery',
+    },
+  ],
+}
 
 type Props = {
   data: MapData
@@ -221,7 +245,11 @@ function clearTrackLayers(map: MapLibreMap) {
   const style = map.getStyle()
   if (!style?.layers) return
   for (const layer of [...style.layers]) {
-    if (layer.id.startsWith('track-line-') || layer.id.startsWith('track-hit-')) {
+    if (
+      layer.id.startsWith('track-line-') ||
+      layer.id.startsWith('track-casing-') ||
+      layer.id.startsWith('track-hit-')
+    ) {
       if (map.getLayer(layer.id)) map.removeLayer(layer.id)
     }
   }
@@ -261,6 +289,18 @@ function syncMap(
           type: 'Feature',
           properties: {id: track._id},
           geometry: {type: 'LineString', coordinates: coords},
+        },
+      })
+      const casingId = `track-casing-${track._id}`
+      map.addLayer({
+        id: casingId,
+        type: 'line',
+        source: sourceId,
+        layout: {'line-join': 'round', 'line-cap': 'round'},
+        paint: {
+          'line-color': '#ffffff',
+          'line-width': 6,
+          'line-opacity': 0.88,
         },
       })
       map.addLayer({
