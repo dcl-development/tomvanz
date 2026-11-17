@@ -1,6 +1,7 @@
 'use client'
 
 import {useState} from 'react'
+import {CloseIcon} from './CloseIcon'
 import {urlFor} from '@/lib/sanity/image'
 import {formatMiles} from '@/lib/geo'
 import {
@@ -84,9 +85,9 @@ export function MapSearch({state, onChange, typeOptions, hasDrone, years, result
               type="button"
               onClick={() => setOpen(false)}
               aria-label="Close search"
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-black/[0.06] text-[20px] leading-none"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-black/[0.06]"
             >
-              ×
+              <CloseIcon className="h-[18px] w-[18px]" />
             </button>
           </div>
 

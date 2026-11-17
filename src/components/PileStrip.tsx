@@ -1,6 +1,7 @@
 'use client'
 
 import {useEffect, useRef, useState} from 'react'
+import {CloseIcon} from './CloseIcon'
 import {urlFor} from '@/lib/sanity/image'
 import type {PinDoc} from '@/lib/sanity/types'
 
@@ -54,9 +55,9 @@ export function PileStrip({pins, onIndexChange, onOpen, onClose}: Props) {
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="flex h-6 w-6 items-center justify-center rounded-full text-[16px] leading-none text-white/80 hover:bg-white/15"
+            className="flex h-6 w-6 items-center justify-center rounded-full text-white/80 hover:bg-white/15"
           >
-            ×
+            <CloseIcon className="h-3.5 w-3.5" />
           </button>
         </div>
       </div>
