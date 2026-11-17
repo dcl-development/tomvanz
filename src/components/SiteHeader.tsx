@@ -5,8 +5,8 @@ import Link from 'next/link'
 import {usePathname} from 'next/navigation'
 
 const links = [
-  {href: '/map', label: 'Map'},
-  {href: '/droneclips', label: 'Drone Clips'},
+  {href: '/', label: 'Map'},
+  {href: '/droneclips', label: 'Video compressor'},
 ]
 
 type Props = {
@@ -30,7 +30,8 @@ export function SiteHeader({name}: Props) {
       </Link>
       <nav aria-label="Site" className="flex shrink-0 items-center text-[13px]">
         {links.map((link) => {
-          const current = pathname === link.href
+          // The map lives at both / and /map (the latter carries shared links).
+          const current = link.href === '/' ? pathname === '/' || pathname === '/map' : pathname === link.href
           return (
             <Link
               key={link.href}

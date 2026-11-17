@@ -21,12 +21,12 @@ export const structure: StructureResolver = (S) =>
             .apiVersion('2026-01-01'),
         ),
       S.listItem()
-        .title('Drone photos')
+        .title('Drone')
         .id('dronePhotos')
         .schemaType('pin')
         .child(
           S.documentList()
-            .title('Drone photos')
+            .title('Drone')
             .filter(
               '(_type == "pin" && coalesce(drone, photo.asset->originalFilename match "DJI_*", false)) || (_type == "photo" && coalesce(drone, image.asset->originalFilename match "DJI_*", false))',
             )

@@ -95,7 +95,7 @@ export function MapSearch({state, onChange, typeOptions, hasDrone, years, result
               <Chips>
                 {hasDrone ? (
                   <Chip active={state.drone} onClick={() => onChange({...state, drone: !state.drone})}>
-                    Drone photos
+                    Drone
                   </Chip>
                 ) : null}
                 {typeOptions.map((option) => (

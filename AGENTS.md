@@ -1,6 +1,6 @@
 # AGENTS.md — tomvanz
 
-Personal site for Tom Vanz (tomvanz.com): MapLibre map of trips, pins and GPX tracks at `/` and `/map`, Drone Clips at `/droneclips`, and embedded Sanity Studio at `/studio`.
+Personal site for Tom Vanz (tomvanz.com): MapLibre map of trips, pins and GPX tracks at `/` (and `/map`, which carries shared-link query strings), the Video compressor (Drone) at `/droneclips`, and embedded Sanity Studio at `/studio`.
 
 ## Dev framework
 
@@ -30,6 +30,8 @@ From the repo root: `npm install && npm run dev`; `npm run build`; `npm run lint
 Sanity project `lee2r8sa`, dataset `production` (hardcoded in `sanity.config.ts` / `sanity.cli.ts`). `SANITY_API_READ_TOKEN` is optional. Drafts never show on the map.
 
 ## Gotchas
+
+- Sanity reads are cached for 10 minutes (`src/lib/sanity/load.ts`; `/` is a pre-built page with `revalidate = 600`) so uptime pings never hit Sanity. Studio edits can take up to ~10 min to show on the site. Don't add uncached Sanity fetches to the layout or `/`.
 
 - GPX routes are stored as JSON text, not geopoint arrays.
 - "trip" is the current name (formerly "catch"); trip photos are folded into pins (no separate Photos layer).
