@@ -13,7 +13,7 @@ const data: MapData = {
   name: 'test',
   pins: [
     {_id: 'a', title: 'Mount Marcy', kind: 'mountain', note: 'Highest in NY', at: '2025-07-04T10:00:00Z', location: {lat: 44.1, lng: -73.9}},
-    {_id: 'b', title: 'Lake Colden', kind: 'place', at: '2024-07-03T10:00:00Z', location: {lat: 44.1, lng: -73.98}},
+    {_id: 'b', title: 'Lake Colden', kind: 'place', at: '2024-07-03T10:00:00Z', isDrone: true, location: {lat: 44.1, lng: -73.98}},
     {_id: 'c', title: 'Undated spot', kind: 'trip', location: {lat: 44.2, lng: -73.8}},
   ],
   tracks: [
@@ -53,6 +53,27 @@ describe('applyMapFilters', () => {
     const y2025 = applyMapFilters(data, {...emptyMapFilters, year: '2025'})
     expect(y2025.pins.map((p) => p._id)).toEqual(['a'])
     expect(y2025.tracks).toHaveLength(1)
+  })
+})
+
+describe('drone filter', () => {
+  it('keeps only drone photos and drops routes', () => {
+    const drone = applyMapFilters(data, {...emptyMapFilters, drone: true})
+    expect(drone.pins.map((p) => p._id)).toEqual(['b'])
+    expect(drone.tracks).toEqual([])
+    expect(filtersActive({...emptyMapFilters, drone: true})).toBe(true)
+  })
+
+  it('combines with the other filters', () => {
+    const none = applyMapFilters(data, {...emptyMapFilters, drone: true, year: '2025'})
+    expect(none.pins).toEqual([])
+    const some = applyMapFilters(data, {...emptyMapFilters, drone: true, year: '2024'})
+    expect(some.pins.map((p) => p._id)).toEqual(['b'])
+  })
+
+  it('only offers the filter when some photo is a drone photo', () => {
+    expect(filterOptions(data).hasDrone).toBe(true)
+    expect(filterOptions({...data, pins: data.pins.map((p) => ({...p, isDrone: false}))}).hasDrone).toBe(false)
   })
 })
 

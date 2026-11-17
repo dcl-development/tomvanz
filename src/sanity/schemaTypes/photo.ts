@@ -49,17 +49,28 @@ export const photo = defineType({
       title: 'Date',
       type: 'datetime',
     }),
+    defineField({
+      name: 'drone',
+      title: 'Drone photo',
+      type: 'boolean',
+      description:
+        'Drone photos are spotted automatically from their DJI file names. Turn this on for one that was renamed along the way.',
+    }),
   ],
   preview: {
     select: {
       fish: 'fish',
       media: 'image',
       lat: 'location.lat',
+      drone: 'drone',
+      fileName: 'image.asset.originalFilename',
     },
-    prepare({fish, media, lat}) {
+    prepare({fish, media, lat, drone, fileName}) {
+      const isDrone = drone === true || /^DJI_/i.test(fileName ?? '')
+      const where = lat == null ? 'No location — off the map' : undefined
       return {
         title: fish || 'Trip',
-        subtitle: lat == null ? 'No location — off the map' : undefined,
+        subtitle: [where, isDrone ? 'Drone' : undefined].filter(Boolean).join(' · ') || undefined,
         media,
       }
     },

@@ -59,17 +59,27 @@ export const pin = defineType({
       title: 'Date',
       type: 'datetime',
     }),
+    defineField({
+      name: 'drone',
+      title: 'Drone photo',
+      type: 'boolean',
+      description:
+        'Drone photos are spotted automatically from their DJI file names. Turn this on for one that was renamed along the way.',
+    }),
   ],
   preview: {
     select: {
       title: 'title',
       kind: 'kind',
       media: 'photo',
+      drone: 'drone',
+      fileName: 'photo.asset.originalFilename',
     },
-    prepare({title, kind, media}) {
+    prepare({title, kind, media, drone, fileName}) {
+      const isDrone = drone === true || /^DJI_/i.test(fileName ?? '')
       return {
         title: title || 'Pin',
-        subtitle: kind,
+        subtitle: isDrone ? `${kind} · Drone` : kind,
         media,
       }
     },
