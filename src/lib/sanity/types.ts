@@ -85,5 +85,5 @@ export type MapData = {
 }
 
 export type SelectedItem =
-  | {kind: 'track'; id: string; lng?: number; lat?: number}
+  | {kind: 'track'; id: string; lng?: number; lat?: number; fly?: boolean}
   | {kind: 'pin'; id: string}

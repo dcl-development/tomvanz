@@ -128,8 +128,29 @@ function Lightbox({url, alt, onClose}: {url: string; alt: string; onClose: () =>
 
 export function InfoCard({data, selected, onClose, placement}: Props) {
   const [expanded, setExpanded] = useState(false)
+  const [copied, setCopied] = useState(false)
   const card = cardModel(data, selected)
   if (!card) return null
+
+  const share = async () => {
+    const url = new URL('/map', window.location.origin)
+    url.searchParams.set(selected.kind === 'pin' ? 'photo' : 'track', selected.id)
+    try {
+      if (navigator.share) {
+        await navigator.share({title: card.title, url: url.toString()})
+        return
+      }
+    } catch (error) {
+      if ((error as Error).name === 'AbortError') return
+    }
+    try {
+      await navigator.clipboard.writeText(url.toString())
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      /* clipboard blocked: nothing more we can do */
+    }
+  }
 
   const frame =
     placement === 'sheet'
@@ -181,6 +202,17 @@ export function InfoCard({data, selected, onClose, placement}: Props) {
           </div>
         ) : null}
 
+        <button
+          type="button"
+          onClick={share}
+          aria-label="Share link"
+          className="absolute left-3 top-3 flex h-9 items-center gap-1.5 rounded-full bg-black/35 px-3 text-[12px] font-semibold text-white backdrop-blur-md transition hover:bg-black/50 active:scale-95"
+        >
+          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M12 3v12M12 3l-4 4M12 3l4 4M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7" />
+          </svg>
+          {copied ? 'Link copied' : 'Share'}
+        </button>
         <button
           type="button"
           onClick={onClose}

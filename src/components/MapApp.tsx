@@ -1,10 +1,11 @@
 'use client'
 
-import {useEffect, useMemo, useRef, useState} from 'react'
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react'
 import dynamic from 'next/dynamic'
 import {MapLayers, type LayerFilters} from './MapLayers'
 import {InfoCard} from './InfoCard'
-import type {MapData, SelectedItem} from '@/lib/sanity/types'
+import {PileStrip} from './PileStrip'
+import type {MapData, PinDoc, SelectedItem} from '@/lib/sanity/types'
 
 const MapCanvas = dynamic(() => import('./MapCanvas').then((mod) => mod.MapCanvas), {
   ssr: false,
@@ -17,13 +18,17 @@ const MapCanvas = dynamic(() => import('./MapCanvas').then((mod) => mod.MapCanva
 
 type Props = {
   data: MapData
+  /** Set when the page was opened from a shared link. */
+  initialSelected?: SelectedItem | null
 }
 
 const emptyFilters: LayerFilters = {tracks: true, pins: true}
 
-export function MapApp({data}: Props) {
+export function MapApp({data, initialSelected = null}: Props) {
   const [filters, setFilters] = useState<LayerFilters>(emptyFilters)
-  const [selected, setSelected] = useState<SelectedItem | null>(null)
+  const [selected, setSelected] = useState<SelectedItem | null>(initialSelected)
+  const [pileIds, setPileIds] = useState<string[] | null>(null)
+  const [pileIndex, setPileIndex] = useState(0)
   const [mapFailed, setMapFailed] = useState(false)
   const [threeD, setThreeD] = useState(false)
   const [hint, setHint] = useState<'touch' | 'mouse' | null>(null)
@@ -43,6 +48,33 @@ export function MapApp({data}: Props) {
     setHint(window.matchMedia('(pointer: coarse)').matches ? 'touch' : 'mouse')
     hintTimer.current = setTimeout(() => setHint(null), 5000)
   }
+
+  // Any new selection (or a tap on empty map) closes the pile strip.
+  const select = useCallback((item: SelectedItem | null) => {
+    setPileIds(null)
+    setSelected(item)
+  }, [])
+
+  const openPile = useCallback((ids: string[]) => {
+    setSelected(null)
+    setPileIndex(0)
+    setPileIds(ids)
+  }, [])
+
+  const pilePins = useMemo(() => {
+    if (!pileIds) return null
+    const byId = new Map(data.pins.map((pin) => [pin._id, pin]))
+    return pileIds.map((id) => byId.get(id)).filter((pin): pin is PinDoc => Boolean(pin))
+  }, [pileIds, data])
+
+  // Keep the address bar pointing at whatever is open, so the link can be shared.
+  useEffect(() => {
+    const url = new URL(window.location.href)
+    url.searchParams.delete('photo')
+    url.searchParams.delete('track')
+    if (selected) url.searchParams.set(selected.kind === 'pin' ? 'photo' : 'track', selected.id)
+    window.history.replaceState(window.history.state, '', url)
+  }, [selected])
 
   const visibleCount =
     (filters.tracks ? data.tracks.length : 0) + (filters.pins ? data.pins.length : 0)
@@ -68,7 +100,9 @@ export function MapApp({data}: Props) {
           filters={filters}
           threeD={threeD}
           selected={card}
-          onSelect={setSelected}
+          highlightId={pilePins?.[pileIndex]?._id ?? null}
+          onSelect={select}
+          onPile={openPile}
           onMapError={() => setMapFailed(true)}
         />
       )}
@@ -97,9 +131,17 @@ export function MapApp({data}: Props) {
           </p>
         </div>
       ) : null}
+      {pilePins && pilePins.length > 1 && !card ? (
+        <PileStrip
+          pins={pilePins}
+          onIndexChange={setPileIndex}
+          onOpen={(id) => select({kind: 'pin', id})}
+          onClose={() => select(null)}
+        />
+      ) : null}
       {card ? (
         <div className="md:hidden">
-          <InfoCard data={data} selected={card} onClose={() => setSelected(null)} placement="sheet" />
+          <InfoCard data={data} selected={card} onClose={() => select(null)} placement="sheet" />
         </div>
       ) : null}
     </div>
