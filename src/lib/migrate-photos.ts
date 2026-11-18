@@ -111,3 +111,25 @@ export function inBatches<T>(items: T[], size: number): T[][] {
   for (let i = 0; i < items.length; i += size) batches.push(items.slice(i, i + size))
   return batches
 }
+
+/** The part of a Sanity transaction this uses. */
+export type TransactionLike = {
+  delete: (id: string) => TransactionLike
+  create: (doc: {_id: string; _type: string}) => TransactionLike
+  commit: () => Promise<unknown>
+}
+
+/**
+ * Replaces documents with new versions that may have a different _type. Sanity won't change a
+ * document's type in place (`_type` is immutable), so each old document is deleted and its
+ * replacement created with the same _id, all in one transaction: either every document in the
+ * group is replaced or none is.
+ */
+export async function replaceDocuments(
+  client: {transaction: () => TransactionLike},
+  docs: {_id: string; _type: string}[],
+): Promise<void> {
+  let tx = client.transaction()
+  for (const doc of docs) tx = tx.delete(doc._id).create(doc)
+  await tx.commit()
+}

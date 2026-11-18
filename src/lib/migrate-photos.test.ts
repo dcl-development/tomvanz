@@ -1,6 +1,6 @@
 import {describe, expect, it} from 'vitest'
 
-import {inBatches, planMigration, toPhotoDoc, type OldDoc} from './migrate-photos'
+import {inBatches, planMigration, replaceDocuments, toPhotoDoc, type OldDoc, type TransactionLike} from './migrate-photos'
 
 const image = (ref = 'image-abc-800x600-jpg') => ({_type: 'image', asset: {_type: 'reference', _ref: ref}})
 
@@ -114,5 +114,93 @@ describe('inBatches', () => {
   it('splits into groups of at most the size', () => {
     expect(inBatches([1, 2, 3, 4, 5], 2)).toEqual([[1, 2], [3, 4], [5]])
     expect(inBatches([], 3)).toEqual([])
+  })
+})
+
+/**
+ * A stand-in for Sanity that enforces the rules that bit us: a document's _type is immutable
+ * (createOrReplace can't change it), a document can't be created twice, and a transaction is
+ * all-or-nothing, applied in order.
+ */
+function fakeSanity(initial: OldDoc[]) {
+  const store = new Map(initial.map((d) => [d._id, structuredClone(d)]))
+  type Mutation = {op: 'delete'; id: string} | {op: 'create'; doc: {_id: string; _type: string}} | {op: 'createOrReplace'; doc: {_id: string; _type: string}}
+  const transaction = () => {
+    const mutations: Mutation[] = []
+    const tx: TransactionLike & {createOrReplace: (doc: {_id: string; _type: string}) => typeof tx} = {
+      delete(id) {
+        mutations.push({op: 'delete', id})
+        return tx
+      },
+      create(doc) {
+        mutations.push({op: 'create', doc})
+        return tx
+      },
+      createOrReplace(doc) {
+        mutations.push({op: 'createOrReplace', doc})
+        return tx
+      },
+      async commit() {
+        const working = new Map(store)
+        for (const m of mutations) {
+          if (m.op === 'delete') working.delete(m.id)
+          else if (m.op === 'create') {
+            if (working.has(m.doc._id)) throw new Error(`document "${m.doc._id}" already exists`)
+            working.set(m.doc._id, structuredClone(m.doc) as OldDoc)
+          } else {
+            const existing = working.get(m.doc._id)
+            if (existing && existing._type !== m.doc._type) {
+              throw new Error(`document "${m.doc._id}": immutable attribute "_type" may not be modified`)
+            }
+            working.set(m.doc._id, structuredClone(m.doc) as OldDoc)
+          }
+        }
+        store.clear()
+        working.forEach((v, k) => store.set(k, v))
+      },
+    }
+    return tx
+  }
+  return {store, transaction}
+}
+
+describe('replaceDocuments (against a stand-in that behaves like Sanity)', () => {
+  it('createOrReplace cannot change a type, which is what the first version tried', async () => {
+    const sanity = fakeSanity([pin])
+    const converted = planMigration([pin]).convert.map((c) => c.to)
+    await expect(sanity.transaction().createOrReplace(converted[0]!).commit()).rejects.toThrow('immutable attribute')
+    expect(sanity.store.get('pin-1')?._type).toBe('pin')
+  })
+
+  it('deleting and re-creating with the same id converts pins and trip photos, drafts included', async () => {
+    const draft: OldDoc = {...pin, _id: 'drafts.pin-1', title: 'Draft copy'}
+    const sanity = fakeSanity([pin, tripPhoto, draft])
+    const converted = planMigration([pin, tripPhoto, draft]).convert.map((c) => c.to)
+    await replaceDocuments(sanity, converted)
+    expect([...sanity.store.values()].map((d) => `${d._id}:${d._type}`).sort()).toEqual([
+      'drafts.pin-1:photo',
+      'photo-1:photo',
+      'pin-1:photo',
+    ])
+    expect(sanity.store.get('photo-1')).toMatchObject({title: 'McDonalds Gondola', note: 'Up we go'})
+    expect(sanity.store.get('photo-1')).not.toHaveProperty('fish')
+  })
+
+  it('is all-or-nothing: if a later step in the transaction fails, nothing is applied', async () => {
+    const sanity = fakeSanity([pin, tripPhoto])
+    const [first] = planMigration([pin, tripPhoto]).convert.map((c) => c.to)
+    // delete + create works, but creating the same id again fails, so the whole group must roll back
+    const tx = sanity.transaction().delete('pin-1').create(first!).create(first!)
+    await expect(tx.commit()).rejects.toThrow('already exists')
+    expect([...sanity.store.values()].map((d) => `${d._id}:${d._type}`).sort()).toEqual(['photo-1:photo', 'pin-1:pin'])
+  })
+
+  it('restoring the original documents works the other way round too', async () => {
+    const sanity = fakeSanity([pin, tripPhoto])
+    const converted = planMigration([pin, tripPhoto]).convert.map((c) => c.to)
+    await replaceDocuments(sanity, converted)
+    await replaceDocuments(sanity, [pin, tripPhoto] as {_id: string; _type: string}[])
+    expect(sanity.store.get('pin-1')?._type).toBe('pin')
+    expect(sanity.store.get('photo-1')).toHaveProperty('fish', 'McDonalds Gondola')
   })
 })

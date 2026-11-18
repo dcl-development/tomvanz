@@ -3,7 +3,14 @@
 import {useRef, useState} from 'react'
 import {Badge, Box, Button, Card, Checkbox, Flex, Spinner, Stack, Text} from '@sanity/ui'
 import {useClient} from 'sanity'
-import {inBatches, planMigration, type MigrationPlan, type OldDoc} from '../../lib/migrate-photos'
+import {
+  inBatches,
+  planMigration,
+  replaceDocuments,
+  type MigrationPlan,
+  type OldDoc,
+  type TransactionLike,
+} from '../../lib/migrate-photos'
 
 /** The little the migration needs from the Studio's connection to Sanity. */
 export type MigrationClient = {
@@ -11,7 +18,7 @@ export type MigrationClient = {
   fetchAll: () => Promise<OldDoc[]>
   /** The current version of specific documents. */
   fetchByIds: (ids: string[]) => Promise<OldDoc[]>
-  /** Replace these documents in one all-or-nothing step. */
+  /** Replace these documents (the type may change) in one all-or-nothing step. */
   replaceAll: (docs: object[]) => Promise<void>
 }
 
@@ -23,11 +30,11 @@ export function MigratePhotosTool() {
   const client: MigrationClient = {
     fetchAll: () => sanity.fetch<OldDoc[]>(`*[_type in ["pin", "photo"]]`),
     fetchByIds: (ids) => sanity.fetch<OldDoc[]>(`*[_id in $ids]`, {ids}),
-    replaceAll: async (docs) => {
-      let tx = sanity.transaction()
-      for (const doc of docs) tx = tx.createOrReplace(doc as {_id: string; _type: string})
-      await tx.commit()
-    },
+    replaceAll: (docs) =>
+      replaceDocuments(
+        {transaction: () => sanity.transaction() as unknown as TransactionLike},
+        docs as {_id: string; _type: string}[],
+      ),
   }
   return <MigratePhotosView client={client} />
 }
@@ -94,10 +101,17 @@ export function MigratePhotosView({client}: {client: MigrationClient}) {
     setProgress({done: 0, total: ids.length})
     try {
       let done = 0
-      for (const batch of inBatches(ids, BATCH_SIZE)) {
+      // One document first as a trial: if anything about the real Sanity differs from what we expect,
+      // it fails here, on one document, before the rest are touched.
+      const batches = [ids.slice(0, 1), ...inBatches(ids.slice(1), BATCH_SIZE)]
+      for (const batch of batches) {
         // Read the batch fresh right before writing, so an edit made since the scan isn't lost.
         const fresh = planMigration(await client.fetchByIds(batch))
         if (fresh.convert.length > 0) await client.replaceAll(fresh.convert.map((c) => c.to))
+        // Check it really took before moving on.
+        const after = await client.fetchByIds(batch)
+        const stillOld = after.filter((d) => d._type !== 'photo' || 'fish' in d || 'caption' in d)
+        if (stillOld.length > 0) throw new Error(`${stillOld.length} document(s) did not convert as expected`)
         done += batch.length
         setProgress({done, total: ids.length})
       }
