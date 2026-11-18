@@ -12,7 +12,3 @@ updates:
     ignore:
       - dependency-name: "@types/node"
         versions: [">=25"]
-      - dependency-name: "typescript"
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "eslint"
-        update-types: ["version-update:semver-major"]
