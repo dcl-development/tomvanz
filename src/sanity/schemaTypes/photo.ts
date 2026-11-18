@@ -11,6 +11,11 @@ export const photo = defineType({
   type: 'document',
   fields: [
     defineField({
+      name: 'title',
+      title: 'Title',
+      type: 'string',
+    }),
+    defineField({
       name: 'image',
       title: 'Photo',
       description:
@@ -24,10 +29,10 @@ export const photo = defineType({
       validation: (Rule) => Rule.required(),
     }),
     defineField({
-      name: 'title',
-      title: 'Title',
-      type: 'string',
-      description: 'Optional.',
+      name: 'drone',
+      title: 'Drone photo',
+      type: 'boolean',
+      components: {input: DroneInput},
     }),
     defineField({
       name: 'location',
@@ -48,20 +53,11 @@ export const photo = defineType({
       title: 'Note',
       type: 'text',
       rows: 3,
-      description: 'Optional.',
     }),
     defineField({
       name: 'takenAt',
       title: 'Date taken',
       type: 'datetime',
-    }),
-    defineField({
-      name: 'drone',
-      title: 'Drone photo',
-      type: 'boolean',
-      description:
-        'Spotted automatically from DJI file names. Switch it on for one that has no drone file name (a screenshot, say), or off if it was spotted by mistake.',
-      components: {input: DroneInput},
     }),
     // Set by the conversion: the id of the old pin this came from (so old shared links still work).
     defineField({name: 'legacyId', title: 'Old id', type: 'string', hidden: true, readOnly: true}),
