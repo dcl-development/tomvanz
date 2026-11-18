@@ -95,11 +95,11 @@ export function GpxInput(props: ObjectInputProps) {
           </Text>
         ) : null}
       </Flex>
-      {message === 'ok' || hasRoute ? (
+      {message === 'ok' ? (
         <Card padding={3} radius={2} tone="positive">
           <Text size={1}>Got the route. Publish to put it on the map.</Text>
         </Card>
-      ) : hasFile ? (
+      ) : hasFile && !hasRoute ? (
         <Card padding={3} radius={2} tone="caution">
           <Text size={1}>File is attached, but the line isn’t parsed. Click Replace GPX and pick the file again.</Text>
         </Card>
