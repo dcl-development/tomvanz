@@ -112,6 +112,14 @@ describe('filterOptions', () => {
   })
 })
 
+describe('resultList icons', () => {
+  it('carries the activity for routes and the kind for photos', () => {
+    const items = resultList(data, 'az', () => null)
+    expect(items.find((i) => i.kind === 'track')?.activity).toBe('hike')
+    expect(items.find((i) => i.id === 'a')).toMatchObject({kind: 'pin', pinKind: 'mountain'})
+  })
+})
+
 describe('resultList', () => {
   it('sorts newest, oldest and A–Z, with undated items last by date', () => {
     const titles = (sort: 'newest' | 'oldest' | 'az') => resultList(data, sort, () => null).map((r) => r.title)

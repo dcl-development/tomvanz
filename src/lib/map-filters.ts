@@ -129,6 +129,10 @@ export type ResultItem = {
   date: string | undefined
   photo: PinDoc['photo']
   miles: number | null
+  /** Routes: bike / hike / other, for the icon's colour. */
+  activity?: TrackDoc['activity']
+  /** Photos: the pin's kind, for the icon shown when there's no picture. */
+  pinKind?: PinDoc['kind']
 }
 
 /** Everything that passed the filters, as one list in the chosen order. */
@@ -142,6 +146,7 @@ export function resultList(shown: MapData, sort: SortMode, miles: (track: TrackD
       date: pin.at,
       photo: pin.photo,
       miles: null,
+      pinKind: pin.kind,
     })),
     ...shown.tracks.map<ResultItem>((track) => ({
       kind: 'track',
@@ -151,6 +156,7 @@ export function resultList(shown: MapData, sort: SortMode, miles: (track: TrackD
       date: track.startedAt,
       photo: track.photo,
       miles: miles(track),
+      activity: track.activity,
     })),
   ]
   const time = (item: ResultItem) => dateOf(item.date)
