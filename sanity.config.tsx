@@ -3,7 +3,6 @@ import {structureTool} from 'sanity/structure'
 import {schemaTypes} from './src/sanity/schemaTypes'
 import {structure} from './src/sanity/structure'
 import {BulkUploadTool} from './src/sanity/components/BulkUploadTool'
-import {MigratePhotosTool} from './src/sanity/components/MigratePhotosTool'
 
 // A small upload arrow for the tool's menu entry.
 const UploadIcon = () => (
@@ -22,14 +21,6 @@ export default defineConfig({
   scheduledDrafts: {enabled: false},
   tasks: {enabled: false},
   plugins: [structureTool({structure})],
-  tools: (prev) => [
-    ...prev,
-    {name: 'bulk-upload', title: 'Bulk upload', icon: UploadIcon, component: BulkUploadTool},
-    // Temporary: run once to move old pins and trip photos into Photos, then it's removed.
-    {name: 'convert-photos', title: 'Convert to Photos', icon: UploadIcon, component: MigratePhotosTool},
-  ],
+  tools: (prev) => [...prev, {name: 'bulk-upload', title: 'Bulk upload', icon: UploadIcon, component: BulkUploadTool}],
   schema: {types: schemaTypes},
-  document: {
-    newDocumentOptions: (prev) => prev.filter((item) => item.templateId !== 'pin'),
-  },
 })

@@ -9,7 +9,7 @@ import {isPhotoFile, photoFromUpload, readPhotoMeta, runPool} from '../../lib/bu
 /** The little the uploader needs from the Studio's connection to Sanity. */
 export type UploaderClient = {
   uploadImage: (file: File) => Promise<{_id: string}>
-  /** The id of a photo (or old pin) already using this image, if any. */
+  /** The id of a photo already using this image, if any. */
   findByAsset: (assetId: string) => Promise<string | null>
   createPhoto: (doc: ReturnType<typeof photoFromUpload>) => Promise<{_id: string}>
 }
@@ -54,7 +54,7 @@ export function BulkUploadTool() {
     uploadImage: (file) => client.assets.upload('image', file, {filename: file.name}),
     findByAsset: (assetId) =>
       client.fetch<string | null>(
-        `*[(_type == "pin" && photo.asset._ref == $id) || (_type == "photo" && image.asset._ref == $id)][0]._id`,
+        `*[_type == "photo" && image.asset._ref == $id][0]._id`,
         {id: assetId},
       ),
     createPhoto: (doc) => client.create(doc),

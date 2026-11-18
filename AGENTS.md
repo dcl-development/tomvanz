@@ -34,9 +34,9 @@ Sanity project `lee2r8sa`, dataset `production` (hardcoded in `sanity.config.ts`
 - Sanity reads go through `src/lib/sanity/load.ts`: cached 60s, timeout + one retry, and guarded so a Sanity outage can't break the site (a build with Sanity down still succeeds with an empty map and a notice; a failed refresh keeps the last good homepage). `/` is a pre-built page with `revalidate = 60`. Studio edits show within ~1 min. Don't add uncached or unguarded Sanity fetches to the layout or `/`. Point uptime monitors at `/api/health` (never touches Sanity).
 
 - GPX routes are stored as JSON text, not geopoint arrays.
-- Content model: **Photo** (`photo`: image, title, location, note, takenAt, drone) and **Route** (`track`). The old `pin` type and the old "trip photo" shape (`fish`/`caption`) still exist until the "Convert to Photos" Studio tool has been run; `src/lib/sanity/queries.ts` reads both shapes, so the site works before and after. After the conversion, a cleanup removes the `pin` type, the hidden legacy fields, the tool, and the compatibility reads.
+- Content model: **Photo** (`photo`: image, title, location, note, takenAt, drone, plus a hidden `legacyId`) and **Route** (`track`). There is no separate pin type. `legacyId` holds the id an old pin had before the 2026-11 conversion, so shared links made with it still open the photo (`src/lib/shared-item.ts`).
 - Drone photos are detected from `DJI_*` file names (`src/lib/drone.ts`), with a manual override switch in the Studio.
-- Studio tools: **Bulk upload** (creates Photos from dropped images, reading GPS and date from the file) and the temporary **Convert to Photos**.
+- Studio tools: **Bulk upload** (creates Photos from dropped images, reading GPS and date from the file).
 - Track colors come from the activity field: bike blue, hike green.
 
 ## Repo facts

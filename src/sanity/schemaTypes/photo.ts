@@ -65,24 +65,20 @@ export const photo = defineType({
     }),
     // Set by the conversion: the id of the old pin this came from (so old shared links still work).
     defineField({name: 'legacyId', title: 'Old id', type: 'string', hidden: true, readOnly: true}),
-    // Old "trip photo" fields. Hidden; the "Convert to Photos" tool moves them to title / note.
-    defineField({name: 'fish', title: 'Title (old)', type: 'string', hidden: true}),
-    defineField({name: 'caption', title: 'Caption (old)', type: 'string', hidden: true}),
   ],
   preview: {
     select: {
       title: 'title',
-      fish: 'fish',
       media: 'image',
       lat: 'location.lat',
       drone: 'drone',
       fileName: 'image.asset.originalFilename',
     },
-    prepare({title, fish, media, lat, drone, fileName}) {
+    prepare({title, media, lat, drone, fileName}) {
       const isDrone = effectiveDrone(drone, fileName)
       const where = lat == null ? 'No location, off the map' : undefined
       return {
-        title: title || fish || fileName || 'Photo',
+        title: title || fileName || 'Photo',
         subtitle: [where, isDrone ? 'Drone' : undefined].filter(Boolean).join(' · ') || undefined,
         media,
       }

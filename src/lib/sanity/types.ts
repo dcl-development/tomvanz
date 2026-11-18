@@ -3,17 +3,6 @@ export type Geopoint = {
   lng: number
 }
 
-export type PhotoDoc = {
-  _id: string
-  fish: string
-  caption?: string
-  takenAt?: string
-  location: Geopoint
-  image: {
-    asset?: {_ref: string}
-  }
-}
-
 export type TrackDoc = {
   _id: string
   title: string
