@@ -11,7 +11,6 @@ import {
   emptyMapFilters,
   type MapFilterState,
   type ResultItem,
-  type SortMode,
   type TypeOption,
 } from '@/lib/map-filters'
 
@@ -20,17 +19,10 @@ type Props = {
   onChange: (next: MapFilterState) => void
   typeOptions: TypeOption[]
   hasDrone: boolean
-  years: string[]
   results: ResultItem[]
   total: number
   onPick: (item: ResultItem) => void
 }
-
-const SORTS: {value: SortMode; label: string}[] = [
-  {value: 'newest', label: 'Newest'},
-  {value: 'oldest', label: 'Oldest'},
-  {value: 'az', label: 'A–Z'},
-]
 
 function formatDate(value?: string) {
   if (!value) return null
@@ -39,7 +31,7 @@ function formatDate(value?: string) {
   return date.toLocaleDateString(undefined, {year: 'numeric', month: 'short', day: 'numeric'})
 }
 
-export function MapSearch({state, onChange, typeOptions, hasDrone, years, results, total, onPick}: Props) {
+export function MapSearch({state, onChange, typeOptions, hasDrone, results, total, onPick}: Props) {
   const [open, setOpen] = useState(false)
   const count = activeFilterCount(state)
 
@@ -112,39 +104,12 @@ export function MapSearch({state, onChange, typeOptions, hasDrone, years, result
                 ))}
               </Chips>
             ) : null}
-            {years.length > 1 ? (
-              <Chips>
-                {years.map((year) => (
-                  <Chip
-                    key={year}
-                    active={state.year === year}
-                    onClick={() => onChange({...state, year: state.year === year ? null : year})}
-                  >
-                    {year}
-                  </Chip>
-                ))}
-              </Chips>
-            ) : null}
             <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-1" role="group" aria-label="Sort">
-                {SORTS.map((sort) => (
-                  <button
-                    key={sort.value}
-                    type="button"
-                    onClick={() => onChange({...state, sort: sort.value})}
-                    aria-pressed={state.sort === sort.value}
-                    className={`rounded-full px-2.5 py-1 text-[12px] font-medium ${
-                      state.sort === sort.value ? 'bg-black/[0.09] text-black' : 'text-black/45'
-                    }`}
-                  >
-                    {sort.label}
-                  </button>
-                ))}
-              </div>
+              <span />
               {count > 0 ? (
                 <button
                   type="button"
-                  onClick={() => onChange({...emptyMapFilters, sort: state.sort})}
+                  onClick={() => onChange(emptyMapFilters)}
                   className="text-[12px] font-semibold text-black/60 underline underline-offset-2"
                 >
                   Clear

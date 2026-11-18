@@ -52,12 +52,6 @@ describe('applyMapFilters', () => {
     const drone = applyMapFilters(data, {...emptyMapFilters, query: 'drone'})
     expect(drone.pins.map((p) => p._id)).toEqual(['b'])
   })
-
-  it('filters by year and drops undated items when a year is chosen', () => {
-    const y2025 = applyMapFilters(data, {...emptyMapFilters, year: '2025'})
-    expect(y2025.pins.map((p) => p._id)).toEqual(['a'])
-    expect(y2025.tracks).toHaveLength(1)
-  })
 })
 
 describe('Photos / Routes group chips', () => {
@@ -89,10 +83,10 @@ describe('drone filter', () => {
   })
 
   it('combines with the other filters', () => {
-    const none = applyMapFilters(data, {...emptyMapFilters, drone: true, year: '2025'})
-    expect(none.pins).toEqual([])
-    const some = applyMapFilters(data, {...emptyMapFilters, drone: true, year: '2024'})
+    const some = applyMapFilters(data, {...emptyMapFilters, drone: true, query: 'drone'})
     expect(some.pins.map((p) => p._id)).toEqual(['b'])
+    const none = applyMapFilters(data, {...emptyMapFilters, drone: true, query: 'nothing matches this'})
+    expect(none.pins).toEqual([])
   })
 
   it('only offers the filter when some photo is a drone photo', () => {
@@ -102,20 +96,19 @@ describe('drone filter', () => {
 })
 
 describe('filterOptions', () => {
-  it('only offers route kinds and years that exist, newest year first', () => {
-    const {typeOptions, years} = filterOptions(data)
+  it('only offers route kinds that exist', () => {
+    const {typeOptions} = filterOptions(data)
     expect(typeOptions.map((o) => o.value)).toEqual([
       'pin:all',
       'track:all',
       'track:hike',
     ])
-    expect(years).toEqual(['2025', '2024'])
   })
 })
 
 describe('resultList icons', () => {
   it('carries the activity for routes, and labels photos Photo or Drone', () => {
-    const items = resultList(data, 'az', () => null)
+    const items = resultList(data, () => null)
     expect(items.find((i) => i.kind === 'track')?.activity).toBe('hike')
     expect(items.find((i) => i.id === 'a')).toMatchObject({kind: 'pin', label: 'Photo'})
     expect(items.find((i) => i.id === 'b')).toMatchObject({kind: 'pin', label: 'Drone'})
@@ -123,10 +116,8 @@ describe('resultList icons', () => {
 })
 
 describe('resultList', () => {
-  it('sorts newest, oldest and A–Z, with undated items last by date', () => {
-    const titles = (sort: 'newest' | 'oldest' | 'az') => resultList(data, sort, () => null).map((r) => r.title)
-    expect(titles('newest')).toEqual(['Mount Marcy', 'Algonquin loop', 'Lake Colden', 'Undated spot'])
-    expect(titles('oldest')).toEqual(['Lake Colden', 'Algonquin loop', 'Mount Marcy', 'Undated spot'])
-    expect(titles('az')).toEqual(['Algonquin loop', 'Lake Colden', 'Mount Marcy', 'Undated spot'])
+  it('lists dated items newest first, with undated ones last', () => {
+    const titles = resultList(data, () => null).map((r) => r.title)
+    expect(titles).toEqual(['Mount Marcy', 'Algonquin loop', 'Lake Colden', 'Undated spot'])
   })
 })
