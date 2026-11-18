@@ -4,12 +4,11 @@ export type MapFilterState = {
   query: string
   /** Empty means "everything". Values: `pin:all` (photos), `track:all` (routes), `track:hike`, … */
   types: string[]
-  year: string | null
   /** Only photos shot with a drone. */
   drone: boolean
 }
 
-export const emptyMapFilters: MapFilterState = {query: '', types: [], year: null, drone: false}
+export const emptyMapFilters: MapFilterState = {query: '', types: [], drone: false}
 
 export type TypeOption = {value: string; label: string}
 
@@ -34,12 +33,7 @@ function dateOf(value?: string): number | null {
   return Number.isNaN(time) ? null : time
 }
 
-export function yearOf(value?: string): string | null {
-  const time = dateOf(value)
-  return time == null ? null : String(new Date(time).getFullYear())
-}
-
-/** The route kinds and years that actually exist in the data, so the panel only offers real choices. */
+/** The route kinds that actually exist in the data, so the panel only offers real choices. */
 export function filterOptions(data: MapData) {
   const routeKinds = new Map<string, string>()
   for (const track of data.tracks) routeKinds.set(trackType(track), TRACK_LABELS[track.activity] ?? 'Routes')
@@ -57,25 +51,16 @@ export function filterOptions(data: MapData) {
       : []
   const typeOptions: TypeOption[] = [...groups, ...kinds]
 
-  const years = new Set<string>()
-  for (const pin of data.pins) {
-    const y = yearOf(pin.at)
-    if (y) years.add(y)
-  }
-  for (const track of data.tracks) {
-    const y = yearOf(track.startedAt)
-    if (y) years.add(y)
-  }
   const hasDrone = data.pins.some((pin) => pin.isDrone)
-  return {typeOptions, hasDrone, years: [...years].sort((a, b) => Number(b) - Number(a))}
+  return {typeOptions, hasDrone}
 }
 
 export function filtersActive(state: MapFilterState) {
-  return state.query.trim() !== '' || state.types.length > 0 || state.year !== null || state.drone
+  return state.query.trim() !== '' || state.types.length > 0 || state.drone
 }
 
 export function activeFilterCount(state: MapFilterState) {
-  return (state.query.trim() ? 1 : 0) + state.types.length + (state.year ? 1 : 0) + (state.drone ? 1 : 0)
+  return (state.query.trim() ? 1 : 0) + state.types.length + (state.drone ? 1 : 0)
 }
 
 function matchesQuery(query: string, ...fields: (string | undefined)[]) {
@@ -97,7 +82,6 @@ export function applyMapFilters(data: MapData, state: MapFilterState): MapData {
       (pin) =>
         typeOk(pinType()) &&
         (!state.drone || pin.isDrone === true) &&
-        (!state.year || yearOf(pin.at) === state.year) &&
         matchesQuery(state.query, pin.title, pin.note, pin.isDrone ? 'drone' : undefined),
     ),
     // Routes aren't photos, so they drop out when only drone photos are wanted.
@@ -105,7 +89,6 @@ export function applyMapFilters(data: MapData, state: MapFilterState): MapData {
       (track) =>
         !state.drone &&
         typeOk(trackType(track)) &&
-        (!state.year || yearOf(track.startedAt) === state.year) &&
         matchesQuery(state.query, track.title, TRACK_LABELS[track.activity]),
     ),
   }

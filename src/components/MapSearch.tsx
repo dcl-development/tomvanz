@@ -19,7 +19,6 @@ type Props = {
   onChange: (next: MapFilterState) => void
   typeOptions: TypeOption[]
   hasDrone: boolean
-  years: string[]
   results: ResultItem[]
   total: number
   onPick: (item: ResultItem) => void
@@ -32,7 +31,7 @@ function formatDate(value?: string) {
   return date.toLocaleDateString(undefined, {year: 'numeric', month: 'short', day: 'numeric'})
 }
 
-export function MapSearch({state, onChange, typeOptions, hasDrone, years, results, total, onPick}: Props) {
+export function MapSearch({state, onChange, typeOptions, hasDrone, results, total, onPick}: Props) {
   const [open, setOpen] = useState(false)
   const count = activeFilterCount(state)
 
@@ -101,19 +100,6 @@ export function MapSearch({state, onChange, typeOptions, hasDrone, years, result
                     onClick={() => toggleType(option.value)}
                   >
                     {option.label}
-                  </Chip>
-                ))}
-              </Chips>
-            ) : null}
-            {years.length > 1 ? (
-              <Chips>
-                {years.map((year) => (
-                  <Chip
-                    key={year}
-                    active={state.year === year}
-                    onClick={() => onChange({...state, year: state.year === year ? null : year})}
-                  >
-                    {year}
                   </Chip>
                 ))}
               </Chips>
