@@ -9,27 +9,16 @@ export const structure: StructureResolver = (S) =>
         .id('siteSettings')
         .child(S.document().schemaType('siteSettings').documentId('siteSettings').title('Site')),
       S.divider(),
-      S.documentTypeListItem('track').title('Tracks'),
-      S.listItem()
-        .title('Pins')
-        .id('pins')
-        .schemaType('pin')
-        .child(
-          S.documentList()
-            .title('Pins')
-            .filter('_type in ["pin", "photo"]')
-            .apiVersion('2026-01-01'),
-        ),
+      S.documentTypeListItem('track').title('Routes'),
+      S.documentTypeListItem('photo').title('Photos'),
       S.listItem()
         .title('Drone')
         .id('dronePhotos')
-        .schemaType('pin')
+        .schemaType('photo')
         .child(
           S.documentList()
             .title('Drone')
-            .filter(
-              '(_type == "pin" && coalesce(drone, photo.asset->originalFilename match "DJI_*", false)) || (_type == "photo" && coalesce(drone, image.asset->originalFilename match "DJI_*", false))',
-            )
+            .filter('_type == "photo" && coalesce(drone, image.asset->originalFilename match "DJI_*", false)')
             .apiVersion('2026-01-01'),
         ),
     ])

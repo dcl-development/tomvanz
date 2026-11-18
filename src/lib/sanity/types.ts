@@ -3,17 +3,6 @@ export type Geopoint = {
   lng: number
 }
 
-export type PhotoDoc = {
-  _id: string
-  fish: string
-  caption?: string
-  takenAt?: string
-  location: Geopoint
-  image: {
-    asset?: {_ref: string}
-  }
-}
-
 export type TrackDoc = {
   _id: string
   title: string
@@ -64,12 +53,11 @@ function toLngLat(point: unknown): [number, number] | null {
   return null
 }
 
-export type PinKind = 'trip' | 'mountain' | 'park' | 'place'
-
 export type PinDoc = {
   _id: string
+  /** The id this photo had before the content was converted; old shared links use it. */
+  legacyId?: string
   title: string
-  kind: PinKind
   note?: string
   at?: string
   /** Shot with a drone: spotted from a DJI file name, unless switched on or off by hand in the Studio. */

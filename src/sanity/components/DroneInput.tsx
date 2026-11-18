@@ -15,9 +15,8 @@ type ImageValue = {asset?: {_ref: string}}
 export function DroneInput(props: BooleanInputProps) {
   const {value, onChange, readOnly} = props
   const client = useClient({apiVersion: '2026-01-01'})
-  const photo = useFormValue(['photo']) as ImageValue | undefined
   const image = useFormValue(['image']) as ImageValue | undefined
-  const assetRef = photo?.asset?._ref ?? image?.asset?._ref
+  const assetRef = image?.asset?._ref
   // undefined while loading, null when there's no photo or no file name
   const [fileName, setFileName] = useState<string | null | undefined>(undefined)
 

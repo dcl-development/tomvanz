@@ -34,8 +34,9 @@ Sanity project `lee2r8sa`, dataset `production` (hardcoded in `sanity.config.ts`
 - Sanity reads go through `src/lib/sanity/load.ts`: cached 60s, timeout + one retry, and guarded so a Sanity outage can't break the site (a build with Sanity down still succeeds with an empty map and a notice; a failed refresh keeps the last good homepage). `/` is a pre-built page with `revalidate = 60`. Studio edits show within ~1 min. Don't add uncached or unguarded Sanity fetches to the layout or `/`. Point uptime monitors at `/api/health` (never touches Sanity).
 
 - GPX routes are stored as JSON text, not geopoint arrays.
-- "trip" is the current name (formerly "catch"); trip photos are folded into pins (no separate Photos layer).
-- The `photo` type is hidden from Studio's "new document" menu on purpose.
+- Content model: **Photo** (`photo`: image, title, location, note, takenAt, drone, plus a hidden `legacyId`) and **Route** (`track`). There is no separate pin type. `legacyId` holds the id an old pin had before the 2026-11 conversion, so shared links made with it still open the photo (`src/lib/shared-item.ts`).
+- Drone photos are detected from `DJI_*` file names (`src/lib/drone.ts`), with a manual override switch in the Studio.
+- Studio tools: **Bulk upload** (creates Photos from dropped images, reading GPS and date from the file).
 - Track colors come from the activity field: bike blue, hike green.
 
 ## Repo facts

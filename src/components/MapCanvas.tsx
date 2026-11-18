@@ -9,7 +9,7 @@ import {InfoCard} from './InfoCard'
 import {urlFor} from '@/lib/sanity/image'
 import {PILE_FIT_MAX_ZOOM, pileTolerancePx} from '@/lib/pile'
 import {trackColor} from '@/lib/track-color'
-import {lineCoordinates, type MapData, type PinDoc, PinKind, SelectedItem} from '@/lib/sanity/types'
+import {lineCoordinates, type MapData, type PinDoc, SelectedItem} from '@/lib/sanity/types'
 import type {StyleSpecification} from 'maplibre-gl'
 
 const ESRI_ATTRIBUTION =
@@ -51,18 +51,9 @@ type Props = {
   onMapError: () => void
 }
 
-function pinSvg(kind: PinKind) {
-  const halo = 'stroke="white" stroke-width="2"'
-  if (kind === 'trip') {
-    return `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.2" fill="#111" ${halo}/></svg>`
-  }
-  if (kind === 'mountain') {
-    return `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 16 16"><path d="M8 2.5 L14 13.5 H2 Z" fill="#111" ${halo}/></svg>`
-  }
-  if (kind === 'park') {
-    return `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.2" fill="none" stroke="#111" stroke-width="2.4"/><circle cx="8" cy="8" r="6.4" fill="none" stroke="white" stroke-width="1.5"/></svg>`
-  }
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 16 16"><rect x="3.5" y="3.5" width="9" height="9" fill="#111" ${halo}/></svg>`
+/** Marker for a photo that has no picture to show as a thumbnail. */
+function pinSvg() {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 16 16"><rect x="3.5" y="3.5" width="9" height="9" fill="#111" stroke="white" stroke-width="2"/></svg>`
 }
 
 function selectionPoint(data: MapData, selected: SelectedItem): [number, number] | null {
@@ -636,7 +627,7 @@ function renderPins(
       inner.style.backgroundPosition = 'center'
       inner.style.backgroundColor = '#111'
     } else {
-      inner.innerHTML = pinSvg(pin.kind)
+      inner.innerHTML = pinSvg()
       el.style.lineHeight = '0'
     }
     el.appendChild(inner)

@@ -23,7 +23,4 @@ export default defineConfig({
   plugins: [structureTool({structure})],
   tools: (prev) => [...prev, {name: 'bulk-upload', title: 'Bulk upload', icon: UploadIcon, component: BulkUploadTool}],
   schema: {types: schemaTypes},
-  document: {
-    newDocumentOptions: (prev) => prev.filter((item) => item.templateId !== 'photo'),
-  },
 })

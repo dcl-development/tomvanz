@@ -2,7 +2,7 @@
 
 import {useState} from 'react'
 import {CloseIcon} from './CloseIcon'
-import {PinShape} from './shapes'
+import {PhotoShape} from './shapes'
 import {urlFor} from '@/lib/sanity/image'
 import {formatMiles} from '@/lib/geo'
 import {trackColor} from '@/lib/track-color'
@@ -225,7 +225,7 @@ function ResultThumb({item}: {item: ResultItem}) {
   }
   return (
     <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-neutral-800 text-white" aria-hidden>
-      <PinShape kind={item.pinKind ?? 'place'} className="h-5 w-5" />
+      <PhotoShape className="h-5 w-5" />
     </div>
   )
 }

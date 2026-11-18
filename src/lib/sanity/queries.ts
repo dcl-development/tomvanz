@@ -10,27 +10,14 @@ export const mapQuery = defineQuery(`{
     route,
     photo
   },
-  "pins": (
-    *[_type == "pin" && defined(location.lat) && defined(location.lng)] {
-      _id,
-      title,
-      kind,
-      note,
-      at,
-      location,
-      photo,
-      "isDrone": coalesce(drone, photo.asset->originalFilename match "DJI_*", false)
-    }
-    +
-    *[_type == "photo" && defined(location.lat) && defined(location.lng) && defined(image.asset)] {
-      _id,
-      "title": fish,
-      "kind": "trip",
-      "note": caption,
-      "at": takenAt,
-      location,
-      "photo": image,
-      "isDrone": coalesce(drone, image.asset->originalFilename match "DJI_*", false)
-    }
-  ) | order(at desc)
+  "pins": *[_type == "photo" && defined(location.lat) && defined(location.lng) && defined(image.asset)] | order(takenAt desc, _id asc) {
+    _id,
+    legacyId,
+    "title": coalesce(title, ""),
+    note,
+    "at": takenAt,
+    location,
+    "photo": image,
+    "isDrone": coalesce(drone, image.asset->originalFilename match "DJI_*", false)
+  }
 }`)

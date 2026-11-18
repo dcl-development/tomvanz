@@ -1,7 +1,7 @@
 import {readFileSync} from 'node:fs'
 import {describe, expect, it} from 'vitest'
 
-import {isPhotoFile, pinFromUpload, readPhotoMeta, runPool} from './bulk-upload'
+import {isPhotoFile, photoFromUpload, readPhotoMeta, runPool} from './bulk-upload'
 
 const fixture = (name: string) => new Uint8Array(readFileSync(new URL(`./__fixtures__/${name}`, import.meta.url)))
 
@@ -31,22 +31,21 @@ describe('isPhotoFile', () => {
   })
 })
 
-describe('pinFromUpload', () => {
-  it('builds a pin with the photo, location and date when known', () => {
-    const doc = pinFromUpload('image-abc-800x600-jpg', {lat: 44.1, lng: -73.9, takenAt: '2026-10-11T10:00:00.000Z'})
+describe('photoFromUpload', () => {
+  it('builds a Photo with the image, location and date when known', () => {
+    const doc = photoFromUpload('image-abc-800x600-jpg', {lat: 44.1, lng: -73.9, takenAt: '2026-10-11T10:00:00.000Z'})
     expect(doc).toEqual({
-      _type: 'pin',
-      kind: 'place',
-      photo: {_type: 'image', asset: {_type: 'reference', _ref: 'image-abc-800x600-jpg'}},
+      _type: 'photo',
+      image: {_type: 'image', asset: {_type: 'reference', _ref: 'image-abc-800x600-jpg'}},
       location: {_type: 'geopoint', lat: 44.1, lng: -73.9},
-      at: '2026-10-11T10:00:00.000Z',
+      takenAt: '2026-10-11T10:00:00.000Z',
     })
   })
 
   it('leaves out location and date when the photo had none, and never sets a title', () => {
-    const doc = pinFromUpload('image-abc-800x600-jpg', {})
+    const doc = photoFromUpload('image-abc-800x600-jpg', {})
     expect(doc).not.toHaveProperty('location')
-    expect(doc).not.toHaveProperty('at')
+    expect(doc).not.toHaveProperty('takenAt')
     expect(doc).not.toHaveProperty('title')
   })
 })
