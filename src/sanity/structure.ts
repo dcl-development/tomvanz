@@ -9,21 +9,22 @@ export const structure: StructureResolver = (S) =>
         .id('siteSettings')
         .child(S.document().schemaType('siteSettings').documentId('siteSettings').title('Site')),
       S.divider(),
-      S.documentTypeListItem('track').title('Tracks'),
+      S.documentTypeListItem('track').title('Routes'),
+      // Photos, including old pins that haven't been converted yet.
       S.listItem()
-        .title('Pins')
-        .id('pins')
-        .schemaType('pin')
+        .title('Photos')
+        .id('photos')
+        .schemaType('photo')
         .child(
           S.documentList()
-            .title('Pins')
-            .filter('_type in ["pin", "photo"]')
+            .title('Photos')
+            .filter('_type in ["photo", "pin"]')
             .apiVersion('2026-01-01'),
         ),
       S.listItem()
         .title('Drone')
         .id('dronePhotos')
-        .schemaType('pin')
+        .schemaType('photo')
         .child(
           S.documentList()
             .title('Drone')

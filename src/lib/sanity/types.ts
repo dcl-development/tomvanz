@@ -64,12 +64,9 @@ function toLngLat(point: unknown): [number, number] | null {
   return null
 }
 
-export type PinKind = 'trip' | 'mountain' | 'park' | 'place'
-
 export type PinDoc = {
   _id: string
   title: string
-  kind: PinKind
   note?: string
   at?: string
   /** Shot with a drone: spotted from a DJI file name, unless switched on or off by hand in the Studio. */

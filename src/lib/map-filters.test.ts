@@ -12,9 +12,9 @@ import type {MapData} from './sanity/types'
 const data: MapData = {
   name: 'test',
   pins: [
-    {_id: 'a', title: 'Mount Marcy', kind: 'mountain', note: 'Highest in NY', at: '2025-07-04T10:00:00Z', location: {lat: 44.1, lng: -73.9}},
-    {_id: 'b', title: 'Lake Colden', kind: 'place', at: '2024-07-03T10:00:00Z', isDrone: true, location: {lat: 44.1, lng: -73.98}},
-    {_id: 'c', title: 'Undated spot', kind: 'trip', location: {lat: 44.2, lng: -73.8}},
+    {_id: 'a', title: 'Mount Marcy', note: 'Highest in NY', at: '2025-07-04T10:00:00Z', location: {lat: 44.1, lng: -73.9}},
+    {_id: 'b', title: 'Lake Colden', at: '2024-07-03T10:00:00Z', isDrone: true, location: {lat: 44.1, lng: -73.98}},
+    {_id: 'c', title: 'Undated spot', location: {lat: 44.2, lng: -73.8}},
   ],
   tracks: [
     {
@@ -39,14 +39,18 @@ describe('applyMapFilters', () => {
     expect(byNote.tracks).toEqual([])
   })
 
-  it('filters by type across photos and routes', () => {
+  it('filters by route kind, which drops photos', () => {
     const hikes = applyMapFilters(data, {...emptyMapFilters, types: ['track:hike']})
     expect(hikes.pins).toEqual([])
     expect(hikes.tracks.map((t) => t._id)).toEqual(['t'])
 
-    const mixed = applyMapFilters(data, {...emptyMapFilters, types: ['pin:place', 'track:hike']})
-    expect(mixed.pins.map((p) => p._id)).toEqual(['b'])
-    expect(mixed.tracks).toHaveLength(1)
+    const bikes = applyMapFilters(data, {...emptyMapFilters, types: ['track:bike']})
+    expect(bikes.tracks).toEqual([])
+  })
+
+  it('also searches the word drone for drone photos', () => {
+    const drone = applyMapFilters(data, {...emptyMapFilters, query: 'drone'})
+    expect(drone.pins.map((p) => p._id)).toEqual(['b'])
   })
 
   it('filters by year and drops undated items when a year is chosen', () => {
@@ -69,9 +73,9 @@ describe('Photos / Routes group chips', () => {
     expect(routes.tracks).toHaveLength(1)
   })
 
-  it('combine with specific kinds', () => {
-    const mixed = applyMapFilters(data, {...emptyMapFilters, types: ['track:all', 'pin:mountain']})
-    expect(mixed.pins.map((p) => p._id)).toEqual(['a'])
+  it('Photos and a specific kind of route combine', () => {
+    const mixed = applyMapFilters(data, {...emptyMapFilters, types: ['pin:all', 'track:hike']})
+    expect(mixed.pins).toHaveLength(3)
     expect(mixed.tracks).toHaveLength(1)
   })
 })
@@ -98,14 +102,11 @@ describe('drone filter', () => {
 })
 
 describe('filterOptions', () => {
-  it('only offers kinds and years that exist, newest year first', () => {
+  it('only offers route kinds and years that exist, newest year first', () => {
     const {typeOptions, years} = filterOptions(data)
     expect(typeOptions.map((o) => o.value)).toEqual([
       'pin:all',
       'track:all',
-      'pin:trip',
-      'pin:mountain',
-      'pin:place',
       'track:hike',
     ])
     expect(years).toEqual(['2025', '2024'])
@@ -113,10 +114,11 @@ describe('filterOptions', () => {
 })
 
 describe('resultList icons', () => {
-  it('carries the activity for routes and the kind for photos', () => {
+  it('carries the activity for routes, and labels photos Photo or Drone', () => {
     const items = resultList(data, 'az', () => null)
     expect(items.find((i) => i.kind === 'track')?.activity).toBe('hike')
-    expect(items.find((i) => i.id === 'a')).toMatchObject({kind: 'pin', pinKind: 'mountain'})
+    expect(items.find((i) => i.id === 'a')).toMatchObject({kind: 'pin', label: 'Photo'})
+    expect(items.find((i) => i.id === 'b')).toMatchObject({kind: 'pin', label: 'Drone'})
   })
 })
 

@@ -4,10 +4,10 @@ import {useEffect, useMemo, useRef, useState} from 'react'
 import {createPortal} from 'react-dom'
 import {CloseIcon} from './CloseIcon'
 import {ElevationChart} from './ElevationChart'
-import {PinShape} from './shapes'
+import {PhotoShape} from './shapes'
 import {formatMiles, lineMiles} from '@/lib/geo'
 import {urlFor} from '@/lib/sanity/image'
-import {lineCoordinates, type MapData, type PinKind, type SelectedItem} from '@/lib/sanity/types'
+import {lineCoordinates, type MapData, type SelectedItem} from '@/lib/sanity/types'
 import {trackColor} from '@/lib/track-color'
 
 type Props = {
@@ -25,7 +25,8 @@ type CardModel = {
   fullUrl: string | null
   imageAlt: string
   accent: string
-  kind: PinKind | null
+  /** Show the little photo symbol beside the label. */
+  isPhoto: boolean
   dashed: boolean
 }
 
@@ -34,13 +35,6 @@ function formatDate(value?: string) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return null
   return date.toLocaleDateString(undefined, {year: 'numeric', month: 'short', day: 'numeric'})
-}
-
-function kindLabel(kind: PinKind) {
-  if (kind === 'trip') return 'Trip'
-  if (kind === 'mountain') return 'Mountain'
-  if (kind === 'park') return 'Park'
-  return 'Place'
 }
 
 function activityLabel(activity: string) {
@@ -69,7 +63,7 @@ function cardModel(data: MapData, selected: SelectedItem): CardModel | null {
       fullUrl: track.photo?.asset ? urlFor(track.photo).width(2400).fit('max').url() : null,
       imageAlt: track.title,
       accent: trackColor(track.activity),
-      kind: null,
+      isPhoto: false,
       dashed: track.activity === 'hike',
     }
   }
@@ -79,7 +73,7 @@ function cardModel(data: MapData, selected: SelectedItem): CardModel | null {
   const when = formatDate(pin.at)
   return {
     title: pin.title,
-    eyebrow: kindLabel(pin.kind),
+    eyebrow: pin.isDrone ? 'Drone' : 'Photo',
     stats: when ? [when] : [],
     body: pin.note ?? null,
     imageUrl: pin.photo?.asset
@@ -88,7 +82,7 @@ function cardModel(data: MapData, selected: SelectedItem): CardModel | null {
     fullUrl: pin.photo?.asset ? urlFor(pin.photo).width(2400).fit('max').url() : null,
     imageAlt: pin.title,
     accent: '#111',
-    kind: pin.kind,
+    isPhoto: true,
     dashed: false,
   }
 }
@@ -241,7 +235,7 @@ export function InfoCard({data, selected, onClose}: Props) {
 
         <div className="pointer-events-none absolute inset-x-0 bottom-0 p-4 text-white">
           <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/75">
-            {card.kind ? <PinShape kind={card.kind} className="h-3.5 w-3.5 text-white" /> : null}
+            {card.isPhoto ? <PhotoShape className="h-3.5 w-3.5 text-white" /> : null}
             {card.eyebrow}
           </p>
           {headline ? (

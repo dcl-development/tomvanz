@@ -45,16 +45,15 @@ export function isPhotoFile(file: {name: string; type: string}): boolean {
   return file.type.startsWith('image/') || PHOTO_EXTENSIONS.test(file.name)
 }
 
-/** The pin document created for an uploaded photo. Title is left blank on purpose; it's optional. */
-export function pinFromUpload(assetId: string, meta: PhotoMeta) {
+/** The Photo document created for an uploaded picture. Title is left blank on purpose; it's optional. */
+export function photoFromUpload(assetId: string, meta: PhotoMeta) {
   return {
-    _type: 'pin' as const,
-    kind: 'place' as const,
-    photo: {_type: 'image' as const, asset: {_type: 'reference' as const, _ref: assetId}},
+    _type: 'photo' as const,
+    image: {_type: 'image' as const, asset: {_type: 'reference' as const, _ref: assetId}},
     ...(meta.lat != null && meta.lng != null
       ? {location: {_type: 'geopoint' as const, lat: meta.lat, lng: meta.lng}}
       : {}),
-    ...(meta.takenAt ? {at: meta.takenAt} : {}),
+    ...(meta.takenAt ? {takenAt: meta.takenAt} : {}),
   }
 }
 

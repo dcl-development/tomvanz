@@ -4,14 +4,14 @@ import {useCallback, useRef, useState} from 'react'
 import {Badge, Box, Button, Card, Flex, Spinner, Stack, Text} from '@sanity/ui'
 import {useClient} from 'sanity'
 import {useRouter} from 'sanity/router'
-import {isPhotoFile, pinFromUpload, readPhotoMeta, runPool} from '../../lib/bulk-upload'
+import {isPhotoFile, photoFromUpload, readPhotoMeta, runPool} from '../../lib/bulk-upload'
 
 /** The little the uploader needs from the Studio's connection to Sanity. */
 export type UploaderClient = {
   uploadImage: (file: File) => Promise<{_id: string}>
-  /** The id of a pin or trip photo already using this image, if any. */
+  /** The id of a photo (or old pin) already using this image, if any. */
   findByAsset: (assetId: string) => Promise<string | null>
-  createPin: (doc: ReturnType<typeof pinFromUpload>) => Promise<{_id: string}>
+  createPhoto: (doc: ReturnType<typeof photoFromUpload>) => Promise<{_id: string}>
 }
 
 type Status = 'queued' | 'uploading' | 'done' | 'no-location' | 'duplicate' | 'skipped' | 'error'
@@ -57,13 +57,13 @@ export function BulkUploadTool() {
         `*[(_type == "pin" && photo.asset._ref == $id) || (_type == "photo" && image.asset._ref == $id)][0]._id`,
         {id: assetId},
       ),
-    createPin: (doc) => client.create(doc),
+    createPhoto: (doc) => client.create(doc),
   }
-  return <BulkUploadView uploader={uploader} openDocument={(id) => router.navigateIntent('edit', {id, type: 'pin'})} />
+  return <BulkUploadView uploader={uploader} openDocument={(id) => router.navigateIntent('edit', {id, type: 'photo'})} />
 }
 
 /**
- * Drop in a pile of photos and each one becomes a pin: uploaded, placed from its own GPS data,
+ * Drop in a pile of photos and each one becomes a Photo: uploaded, placed from its own GPS data,
  * dated from when it was taken. Drone photos are spotted from their DJI file names by the site.
  */
 export function BulkUploadView({
@@ -93,14 +93,14 @@ export function BulkUploadView({
         const meta = await readPhotoMeta(file)
         const asset = await uploader.uploadImage(file)
 
-        // Uploading the same photo twice gives back the same asset: don't make a second pin for it.
+        // Uploading the same photo twice gives back the same asset: don't make a second photo for it.
         const existing = await uploader.findByAsset(asset._id)
         if (existing) {
           patchRow(id, {status: 'duplicate', docId: existing, note: 'Already on the map.'})
           return
         }
 
-        const doc = await uploader.createPin(pinFromUpload(asset._id, meta))
+        const doc = await uploader.createPhoto(photoFromUpload(asset._id, meta))
         if (meta.lat == null) {
           patchRow(id, {
             status: 'no-location',
@@ -159,8 +159,8 @@ export function BulkUploadView({
             Bulk upload
           </Text>
           <Text size={1} muted>
-            Drop in as many photos as you like. Each becomes a pin, placed from the GPS in the photo and dated from
-            when it was taken. Drone photos are spotted automatically from their file names.
+            Drop in as many photos as you like. Each is placed from the GPS in the photo and dated from when it was
+            taken. Drone photos are spotted automatically from their file names.
           </Text>
         </Stack>
 

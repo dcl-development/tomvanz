@@ -4,7 +4,7 @@ export type SortMode = 'newest' | 'oldest' | 'az'
 
 export type MapFilterState = {
   query: string
-  /** Empty means "everything". Values like `pin:trip` or `track:hike`. */
+  /** Empty means "everything". Values: `pin:all` (photos), `track:all` (routes), `track:hike`, … */
   types: string[]
   year: string | null
   /** Only photos shot with a drone. */
@@ -16,21 +16,15 @@ export const emptyMapFilters: MapFilterState = {query: '', types: [], year: null
 
 export type TypeOption = {value: string; label: string}
 
-const PIN_LABELS: Record<string, string> = {
-  trip: 'Trips',
-  mountain: 'Mountains',
-  park: 'Parks',
-  place: 'Places',
-}
-
 const TRACK_LABELS: Record<string, string> = {
   bike: 'Bike rides',
   hike: 'Hikes',
   other: 'Other routes',
 }
 
-export function pinType(pin: PinDoc) {
-  return `pin:${pin.kind}`
+/** Every photo is of the one sort. */
+export function pinType() {
+  return 'pin:photo'
 }
 
 export function trackType(track: TrackDoc) {
@@ -48,15 +42,14 @@ export function yearOf(value?: string): string | null {
   return time == null ? null : String(new Date(time).getFullYear())
 }
 
-/** The kinds and years that actually exist in the data, so the panel only offers real choices. */
+/** The route kinds and years that actually exist in the data, so the panel only offers real choices. */
 export function filterOptions(data: MapData) {
-  const types = new Map<string, string>()
-  for (const pin of data.pins) types.set(pinType(pin), PIN_LABELS[pin.kind] ?? 'Places')
-  for (const track of data.tracks) types.set(trackType(track), TRACK_LABELS[track.activity] ?? 'Routes')
-  const order = [...Object.keys(PIN_LABELS).map((k) => `pin:${k}`), ...Object.keys(TRACK_LABELS).map((k) => `track:${k}`)]
-  const kinds: TypeOption[] = order
-    .filter((value) => types.has(value))
-    .map((value) => ({value, label: types.get(value)!}))
+  const routeKinds = new Map<string, string>()
+  for (const track of data.tracks) routeKinds.set(trackType(track), TRACK_LABELS[track.activity] ?? 'Routes')
+  const kinds: TypeOption[] = Object.keys(TRACK_LABELS)
+    .map((k) => `track:${k}`)
+    .filter((value) => routeKinds.has(value))
+    .map((value) => ({value, label: routeKinds.get(value)!}))
   // Photos / Routes: one tap for "all of that sort" (only worth offering when both exist).
   const groups: TypeOption[] =
     data.pins.length > 0 && data.tracks.length > 0
@@ -105,10 +98,10 @@ export function applyMapFilters(data: MapData, state: MapFilterState): MapData {
     ...data,
     pins: data.pins.filter(
       (pin) =>
-        typeOk(pinType(pin)) &&
+        typeOk(pinType()) &&
         (!state.drone || pin.isDrone === true) &&
         (!state.year || yearOf(pin.at) === state.year) &&
-        matchesQuery(state.query, pin.title, pin.note, PIN_LABELS[pin.kind]),
+        matchesQuery(state.query, pin.title, pin.note, pin.isDrone ? 'drone' : undefined),
     ),
     // Routes aren't photos, so they drop out when only drone photos are wanted.
     tracks: data.tracks.filter(
@@ -131,8 +124,6 @@ export type ResultItem = {
   miles: number | null
   /** Routes: bike / hike / other, for the icon's colour. */
   activity?: TrackDoc['activity']
-  /** Photos: the pin's kind, for the icon shown when there's no picture. */
-  pinKind?: PinDoc['kind']
 }
 
 /** Everything that passed the filters, as one list in the chosen order. */
@@ -142,11 +133,10 @@ export function resultList(shown: MapData, sort: SortMode, miles: (track: TrackD
       kind: 'pin',
       id: pin._id,
       title: pin.title?.trim() || 'Untitled photo',
-      label: PIN_LABELS[pin.kind] ?? 'Place',
+      label: pin.isDrone ? 'Drone' : 'Photo',
       date: pin.at,
       photo: pin.photo,
       miles: null,
-      pinKind: pin.kind,
     })),
     ...shown.tracks.map<ResultItem>((track) => ({
       kind: 'track',

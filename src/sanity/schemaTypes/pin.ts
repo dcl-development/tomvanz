@@ -6,14 +6,14 @@ import {effectiveDrone} from '../../lib/drone'
 
 export const pin = defineType({
   name: 'pin',
-  title: 'Pin',
+  title: 'Pin (old)',
   type: 'document',
   fields: [
     defineField({
       name: 'title',
       title: 'Title',
       type: 'string',
-      description: 'Optional. Bulk-uploaded photos start without one.',
+      description: 'Old pins are moved to Photos by the "Convert to Photos" tool. New uploads are Photos.',
     }),
     defineField({
       name: 'kind',
