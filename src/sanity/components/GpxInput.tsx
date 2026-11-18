@@ -3,6 +3,7 @@
 import {useRef, useState} from 'react'
 import {Button, Card, Flex, Stack, Text} from '@sanity/ui'
 import {PatchEvent, set, unset, useClient, useFormValue, type ObjectInputProps} from 'sanity'
+import {prepareRouteDisplayFields} from '@/lib/simplify-route'
 import {lineCoordinates} from '../../lib/sanity/types'
 import {parseGpxToLine} from '../lib/parseGpx'
 
@@ -38,11 +39,14 @@ export function GpxInput(props: ObjectInputProps) {
       )
       if (documentId) {
         const draftId = documentId.startsWith('drafts.') ? documentId : `drafts.${documentId}`
+        const {displayCoordinates, distanceMeters} = prepareRouteDisplayFields(line.coordinates)
         await client.patch(draftId).set({
           route: {
             type: 'LineString',
             coordinates: JSON.stringify(line.coordinates),
           },
+          displayCoordinates,
+          distanceMeters,
         }).commit()
       }
       setMessage('ok')
@@ -83,7 +87,7 @@ export function GpxInput(props: ObjectInputProps) {
               props.onChange(PatchEvent.from(unset()))
               if (documentId) {
                 const draftId = documentId.startsWith('drafts.') ? documentId : `drafts.${documentId}`
-                void client.patch(draftId).unset(['route']).commit()
+                void client.patch(draftId).unset(['route', 'displayCoordinates', 'distanceMeters']).commit()
               }
               setMessage('idle')
             }}

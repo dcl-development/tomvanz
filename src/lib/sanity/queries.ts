@@ -7,7 +7,11 @@ export const mapQuery = defineQuery(`{
     title,
     activity,
     startedAt,
-    route,
+    distanceMeters,
+    "route": {
+      "type": "LineString",
+      "coordinates": coalesce(displayCoordinates, route.coordinates)
+    },
     photo
   },
   "pins": *[_type == "photo" && defined(location.lat) && defined(location.lng) && defined(image.asset)] | order(_id asc) {

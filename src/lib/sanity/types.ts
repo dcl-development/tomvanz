@@ -12,6 +12,8 @@ export type TrackDoc = {
     type: 'LineString'
     coordinates: string | Array<Geopoint | [number, number]>
   }
+  /** Full-path length in meters (from dense GPX); optional until backfill or re-upload. */
+  distanceMeters?: number
   photo?: {
     asset?: {_ref: string}
   }
