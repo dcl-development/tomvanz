@@ -4,6 +4,7 @@ import {useEffect, useRef, useState} from 'react'
 import {Button, Card, Flex, Stack, Text} from '@sanity/ui'
 import exifr from 'exifr'
 import {PatchEvent, set, unset, useClient, useFormValue, type ObjectInputProps} from 'sanity'
+import {readPhotoMeta} from '../../lib/bulk-upload'
 
 type GpsStatus = 'idle' | 'found' | 'missing' | 'manual'
 
@@ -60,6 +61,13 @@ export function CatchImageInput(props: ObjectInputProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assetRef, hasLocation, client])
 
+  /** Saves the date the photo was taken (read from the file in the browser) unless one is already set. */
+  async function patchTakenAt(takenAt: string) {
+    if (!documentId) return
+    const draftId = documentId.startsWith('drafts.') ? documentId : `drafts.${documentId}`
+    await client.patch(draftId).setIfMissing({takenAt}).commit()
+  }
+
   async function patchLocation(lat: number, lng: number) {
     if (!documentId) return
     const draftId = documentId.startsWith('drafts.') ? documentId : `drafts.${documentId}`
@@ -77,6 +85,11 @@ export function CatchImageInput(props: ObjectInputProps) {
     } else {
       setStatus('missing')
     }
+
+    // The date comes from the file itself, read here in the browser and saved on the photo. (Sanity's
+    // own copy of the file's metadata is deliberately not asked for: it is publicly readable.)
+    const {takenAt} = await readPhotoMeta(file)
+    if (takenAt) await patchTakenAt(takenAt)
 
     const asset = await client.assets.upload('image', file, {filename: file.name})
     props.onChange(

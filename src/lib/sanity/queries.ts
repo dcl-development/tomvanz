@@ -10,12 +10,11 @@ export const mapQuery = defineQuery(`{
     route,
     photo
   },
-  "pins": *[_type == "photo" && defined(location.lat) && defined(location.lng) && defined(image.asset)] | order(takenAt desc, _id asc) {
+  "pins": *[_type == "photo" && defined(location.lat) && defined(location.lng) && defined(image.asset)] | order(_id asc) {
     _id,
     legacyId,
     "title": coalesce(title, ""),
     note,
-    "at": takenAt,
     location,
     "photo": image,
     "isDrone": coalesce(drone, image.asset->originalFilename match "DJI_*", false)
