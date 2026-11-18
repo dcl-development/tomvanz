@@ -9,7 +9,6 @@ import {InfoCard} from './InfoCard'
 import {urlFor} from '@/lib/sanity/image'
 import {PILE_FIT_MAX_ZOOM, pileTolerancePx} from '@/lib/pile'
 import {trackColor} from '@/lib/track-color'
-import type {LayerFilters} from './MapLayers'
 import {lineCoordinates, type MapData, type PinDoc, PinKind, SelectedItem} from '@/lib/sanity/types'
 import type {StyleSpecification} from 'maplibre-gl'
 
@@ -40,7 +39,6 @@ const STYLE: StyleSpecification = {
 
 type Props = {
   data: MapData
-  filters: LayerFilters
   threeD: boolean
   /** The person tilted the map by hand while 3D was off, so 3D should switch on. */
   onThreeDGesture: () => void
@@ -201,7 +199,6 @@ function hitLayerIds(map: MapLibreMap): string[] {
 
 export function MapCanvas({
   data,
-  filters,
   threeD,
   onThreeDGesture,
   selected,
@@ -224,7 +221,6 @@ export function MapCanvas({
   const selectedRef = useRef(selected)
   const onMapErrorRef = useRef(onMapError)
   const dataRef = useRef(data)
-  const filtersRef = useRef(filters)
   const threeDRef = useRef(threeD)
 
   useEffect(() => {
@@ -234,16 +230,15 @@ export function MapCanvas({
     onThreeDGestureRef.current = onThreeDGesture
     onMapErrorRef.current = onMapError
     dataRef.current = data
-    filtersRef.current = filters
     threeDRef.current = threeD
-  }, [selected, onSelect, onPile, onThreeDGesture, onMapError, data, filters, threeD])
+  }, [selected, onSelect, onPile, onThreeDGesture, onMapError, data, threeD])
 
   const pinCtx = (): PinRenderCtx => ({
     data: dataRef.current,
-    filters: filtersRef.current,
     onSelect: onSelectRef.current,
     onPile: onPileRef.current,
     getActiveId: () => activeIdRef.current,
+    getSelectedId: () => (selectedRef.current?.kind === 'pin' ? selectedRef.current.id : null),
   })
 
   useEffect(() => {
@@ -299,7 +294,8 @@ export function MapCanvas({
     })
     map.on('load', () => {
       readyRef.current = true
-      syncMap(map, dataRef.current, filtersRef.current, pinCtx(), markersRef)
+      // The first draw fits everything in view; later redraws (search, filters) leave the camera alone.
+      syncMap(map, dataRef.current, pinCtx(), markersRef, true)
       if (selectedRef.current) {
         focusSelection(map, dataRef.current, selectedRef.current, 0)
       }
@@ -344,16 +340,17 @@ export function MapCanvas({
   useEffect(() => {
     const map = mapRef.current
     if (!map || !readyRef.current) return
-    syncMap(map, data, filters, pinCtx(), markersRef)
-  }, [data, filters])
+    syncMap(map, data, pinCtx(), markersRef, false)
+  }, [data])
 
   useEffect(() => {
     activeIdRef.current = selected?.kind === 'pin' ? selected.id : highlightId
     markersRef.current.forEach((marker) => {
       const el = marker.getElement()
       el.dataset.active = el.dataset.id === activeIdRef.current ? 'true' : 'false'
+      el.dataset.selected = selected?.kind === 'pin' && el.dataset.id === selected.id ? 'true' : 'false'
     })
-  }, [selected, highlightId, data, filters])
+  }, [selected, highlightId, data])
 
   useEffect(() => {
     const map = mapRef.current
@@ -365,7 +362,7 @@ export function MapCanvas({
       const on = selected?.kind === 'track' && selected.id === id
       map.setPaintProperty(layer.id, 'line-width', on ? 4.5 : 2.5)
     }
-  }, [selected, data, filters])
+  }, [selected, data])
 
   useEffect(() => {
     const map = mapRef.current
@@ -394,7 +391,7 @@ export function MapCanvas({
     const popup = new Popup({
       closeButton: false,
       closeOnClick: false,
-      offset: 30,
+      offset: 2,
       maxWidth: 'none',
       className: 'tv-popup',
       anchor: 'bottom',
@@ -418,6 +415,38 @@ export function MapCanvas({
       else if (card.right > view.right - margin) dx = view.right - margin - card.right
       content.style.translate = `${Math.round(dx)}px 0px`
     }
+    // The card sits on top of the map, so it would swallow the scroll wheel and zoom would stall
+    // whenever it ends up under the cursor. Hand the wheel to the map instead, unless the card
+    // itself is tall enough to scroll and still has room to scroll that way.
+    const popupEl = popup.getElement()
+    const canvasContainer = map.getCanvasContainer()
+    const passWheelToMap = (event: WheelEvent) => {
+      const cardEl = popupEl.querySelector('article')
+      if (cardEl && cardEl.scrollHeight > cardEl.clientHeight + 1) {
+        const atTop = cardEl.scrollTop <= 0
+        const atBottom = cardEl.scrollTop + cardEl.clientHeight >= cardEl.scrollHeight - 1
+        if (event.deltaY < 0 ? !atTop : !atBottom) return
+      }
+      event.preventDefault()
+      canvasContainer.dispatchEvent(
+        new WheelEvent('wheel', {
+          bubbles: true,
+          cancelable: true,
+          clientX: event.clientX,
+          clientY: event.clientY,
+          deltaX: event.deltaX,
+          deltaY: event.deltaY,
+          deltaZ: event.deltaZ,
+          deltaMode: event.deltaMode,
+          ctrlKey: event.ctrlKey,
+          shiftKey: event.shiftKey,
+          altKey: event.altKey,
+          metaKey: event.metaKey,
+        }),
+      )
+    }
+    popupEl.addEventListener('wheel', passWheelToMap, {passive: false})
+
     map.on('move', keepOnScreen)
     const resizeWatcher = new ResizeObserver(keepOnScreen)
     resizeWatcher.observe(node)
@@ -425,6 +454,7 @@ export function MapCanvas({
 
     return () => {
       map.off('move', keepOnScreen)
+      popupEl.removeEventListener('wheel', passWheelToMap)
       resizeWatcher.disconnect()
       popup.remove()
       queueMicrotask(() => root.unmount())
@@ -457,93 +487,93 @@ function clearTrackLayers(map: MapLibreMap) {
 function syncMap(
   map: MapLibreMap,
   data: MapData,
-  filters: LayerFilters,
   ctx: PinRenderCtx,
   markersRef: {current: Map<string, Marker>},
+  /** Move the camera to show everything. Only the very first draw does; redraws never move the view. */
+  fitToData: boolean,
 ) {
   clearTrackLayers(map)
 
   const bounds = new LngLatBounds()
   let hasPoint = false
 
-  if (filters.tracks) {
-    for (const track of data.tracks) {
-      const coords = lineCoordinates(track.route)
-      if (coords.length < 2) continue
-      const color = trackColor(track.activity)
-      const sourceId = `track-src-${track._id}`
-      const layerId = `track-line-${track._id}`
-      const hitId = `track-hit-${track._id}`
-      map.addSource(sourceId, {
-        type: 'geojson',
-        data: {
-          type: 'Feature',
-          properties: {id: track._id},
-          geometry: {type: 'LineString', coordinates: coords},
-        },
-      })
-      const casingId = `track-casing-${track._id}`
-      map.addLayer({
-        id: casingId,
-        type: 'line',
-        source: sourceId,
-        layout: {'line-join': 'round', 'line-cap': 'round'},
-        paint: {
-          'line-color': '#ffffff',
-          'line-width': 6,
-          'line-opacity': 0.88,
-        },
-      })
-      map.addLayer({
-        id: hitId,
-        type: 'line',
-        source: sourceId,
-        layout: {'line-join': 'round', 'line-cap': 'round'},
-        paint: {
-          'line-color': color,
-          'line-width': 18,
-          'line-opacity': 0,
-        },
-      })
-      map.addLayer({
-        id: layerId,
-        type: 'line',
-        source: sourceId,
-        layout: {'line-join': 'round', 'line-cap': 'round'},
-        paint: {
-          'line-color': color,
-          'line-width': 2.5,
-          'line-dasharray': track.activity === 'hike' ? [2, 1.4] : [1, 0],
-        },
-      })
-      for (const [lng, lat] of coords) {
-        bounds.extend([lng, lat])
-        hasPoint = true
-      }
-    }
-  }
-
-  if (filters.pins) {
-    for (const pin of data.pins) {
-      bounds.extend([pin.location.lng, pin.location.lat])
+  for (const track of data.tracks) {
+    const coords = lineCoordinates(track.route)
+    if (coords.length < 2) continue
+    const color = trackColor(track.activity)
+    const sourceId = `track-src-${track._id}`
+    const layerId = `track-line-${track._id}`
+    const hitId = `track-hit-${track._id}`
+    map.addSource(sourceId, {
+      type: 'geojson',
+      data: {
+        type: 'Feature',
+        properties: {id: track._id},
+        geometry: {type: 'LineString', coordinates: coords},
+      },
+    })
+    const casingId = `track-casing-${track._id}`
+    map.addLayer({
+      id: casingId,
+      type: 'line',
+      source: sourceId,
+      layout: {'line-join': 'round', 'line-cap': 'round'},
+      paint: {
+        'line-color': '#ffffff',
+        'line-width': 6,
+        'line-opacity': 0.88,
+      },
+    })
+    map.addLayer({
+      id: hitId,
+      type: 'line',
+      source: sourceId,
+      layout: {'line-join': 'round', 'line-cap': 'round'},
+      paint: {
+        'line-color': color,
+        'line-width': 18,
+        'line-opacity': 0,
+      },
+    })
+    map.addLayer({
+      id: layerId,
+      type: 'line',
+      source: sourceId,
+      layout: {'line-join': 'round', 'line-cap': 'round'},
+      paint: {
+        'line-color': color,
+        'line-width': 2.5,
+        'line-dasharray': track.activity === 'hike' ? [2, 1.4] : [1, 0],
+      },
+    })
+    for (const [lng, lat] of coords) {
+      bounds.extend([lng, lat])
       hasPoint = true
     }
   }
 
-  if (hasPoint) {
-    map.fitBounds(bounds, {padding: 72, maxZoom: 12, duration: 0})
-  } else {
-    map.jumpTo({center: [0, 20], zoom: 1.4})
+  for (const pin of data.pins) {
+    bounds.extend([pin.location.lng, pin.location.lat])
+    hasPoint = true
+  }
+
+  if (fitToData) {
+    if (hasPoint) {
+      map.fitBounds(bounds, {padding: 72, maxZoom: 12, duration: 0})
+    } else {
+      map.jumpTo({center: [0, 20], zoom: 1.4})
+    }
   }
   renderPins(map, ctx, markersRef, true)
 }
 
 type PinRenderCtx = {
   data: MapData
-  filters: LayerFilters
   onSelect: (item: SelectedItem | null) => void
   onPile: (ids: string[]) => void
   getActiveId: () => string | null
+  /** The photo whose card is open; its thumbnail steps aside so the card's arrow points at the spot. */
+  getSelectedId: () => string | null
 }
 
 /**
@@ -560,12 +590,6 @@ function renderPins(
     markersRef.current.forEach((marker) => marker.remove())
     markersRef.current = new Map()
   }
-  if (!ctx.filters.pins) {
-    markersRef.current.forEach((marker) => marker.remove())
-    markersRef.current = new Map()
-    return
-  }
-
   const view = map.getBounds()
   const padLng = (view.getEast() - view.getWest()) * 0.25
   const padLat = (view.getNorth() - view.getSouth()) * 0.25
@@ -587,6 +611,7 @@ function renderPins(
     el.dataset.kind = 'pin'
     el.dataset.id = pin._id
     el.dataset.active = ctx.getActiveId() === pin._id ? 'true' : 'false'
+    el.dataset.selected = ctx.getSelectedId() === pin._id ? 'true' : 'false'
     el.setAttribute('aria-label', pin.title?.trim() || 'Photo')
     // Later pins sit on top, exactly as when every marker was added in order.
     el.style.zIndex = String(index)

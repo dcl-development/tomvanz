@@ -56,6 +56,26 @@ describe('applyMapFilters', () => {
   })
 })
 
+describe('Photos / Routes group chips', () => {
+  it('Photos keeps every kind of photo and drops routes', () => {
+    const photos = applyMapFilters(data, {...emptyMapFilters, types: ['pin:all']})
+    expect(photos.pins).toHaveLength(3)
+    expect(photos.tracks).toEqual([])
+  })
+
+  it('Routes keeps every route and drops photos', () => {
+    const routes = applyMapFilters(data, {...emptyMapFilters, types: ['track:all']})
+    expect(routes.pins).toEqual([])
+    expect(routes.tracks).toHaveLength(1)
+  })
+
+  it('combine with specific kinds', () => {
+    const mixed = applyMapFilters(data, {...emptyMapFilters, types: ['track:all', 'pin:mountain']})
+    expect(mixed.pins.map((p) => p._id)).toEqual(['a'])
+    expect(mixed.tracks).toHaveLength(1)
+  })
+})
+
 describe('drone filter', () => {
   it('keeps only drone photos and drops routes', () => {
     const drone = applyMapFilters(data, {...emptyMapFilters, drone: true})
@@ -80,8 +100,23 @@ describe('drone filter', () => {
 describe('filterOptions', () => {
   it('only offers kinds and years that exist, newest year first', () => {
     const {typeOptions, years} = filterOptions(data)
-    expect(typeOptions.map((o) => o.value)).toEqual(['pin:trip', 'pin:mountain', 'pin:place', 'track:hike'])
+    expect(typeOptions.map((o) => o.value)).toEqual([
+      'pin:all',
+      'track:all',
+      'pin:trip',
+      'pin:mountain',
+      'pin:place',
+      'track:hike',
+    ])
     expect(years).toEqual(['2025', '2024'])
+  })
+})
+
+describe('resultList icons', () => {
+  it('carries the activity for routes and the kind for photos', () => {
+    const items = resultList(data, 'az', () => null)
+    expect(items.find((i) => i.kind === 'track')?.activity).toBe('hike')
+    expect(items.find((i) => i.id === 'a')).toMatchObject({kind: 'pin', pinKind: 'mountain'})
   })
 })
 

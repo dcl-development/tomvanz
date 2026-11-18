@@ -1,8 +1,11 @@
 'use client'
 
 import {useState} from 'react'
+import {CloseIcon} from './CloseIcon'
+import {PinShape} from './shapes'
 import {urlFor} from '@/lib/sanity/image'
 import {formatMiles} from '@/lib/geo'
+import {trackColor} from '@/lib/track-color'
 import {
   activeFilterCount,
   emptyMapFilters,
@@ -84,9 +87,9 @@ export function MapSearch({state, onChange, typeOptions, hasDrone, years, result
               type="button"
               onClick={() => setOpen(false)}
               aria-label="Close search"
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-black/[0.06] text-[20px] leading-none"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-black/[0.06]"
             >
-              ×
+              <CloseIcon className="h-[18px] w-[18px]" />
             </button>
           </div>
 
@@ -167,16 +170,7 @@ export function MapSearch({state, onChange, typeOptions, hasDrone, years, result
                       onClick={() => onPick(item)}
                       className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-black/[0.04] active:bg-black/[0.07]"
                     >
-                      {item.photo?.asset ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={urlFor(item.photo).width(112).height(112).fit('crop').url()}
-                          alt=""
-                          className="h-11 w-11 shrink-0 rounded-lg object-cover"
-                        />
-                      ) : (
-                        <div className="h-11 w-11 shrink-0 rounded-lg bg-neutral-800" />
-                      )}
+                      <ResultThumb item={item} />
                       <span className="min-w-0">
                         <span className="block truncate text-[14px] font-semibold">{item.title}</span>
                         <span className="block truncate text-[12px] text-black/50">{meta}</span>
@@ -190,6 +184,49 @@ export function MapSearch({state, onChange, typeOptions, hasDrone, years, result
         </section>
       ) : null}
     </>
+  )
+}
+
+/** A photo's thumbnail, or an icon tile when there's no picture (a route's line, or the photo's pin shape). */
+function ResultThumb({item}: {item: ResultItem}) {
+  if (item.photo?.asset) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={urlFor(item.photo).width(112).height(112).fit('crop').url()}
+        alt=""
+        className="h-11 w-11 shrink-0 rounded-lg object-cover"
+      />
+    )
+  }
+  if (item.kind === 'track') {
+    const color = trackColor(item.activity ?? 'other')
+    return (
+      <div
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg"
+        style={{background: `linear-gradient(160deg, ${color} 0%, #1a1a1a 85%)`}}
+        aria-hidden
+      >
+        <svg viewBox="0 0 44 44" className="h-full w-full">
+          <path
+            d="M9 31 C13 14, 20 36, 25 22 S33 12, 35 14"
+            fill="none"
+            stroke="white"
+            strokeOpacity="0.9"
+            strokeWidth="2.6"
+            strokeLinecap="round"
+            strokeDasharray={item.activity === 'hike' ? '5 4' : undefined}
+          />
+          <circle cx="9" cy="31" r="3" fill="white" />
+          <circle cx="35" cy="14" r="3" fill="white" />
+        </svg>
+      </div>
+    )
+  }
+  return (
+    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-neutral-800 text-white" aria-hidden>
+      <PinShape kind={item.pinKind ?? 'place'} className="h-5 w-5" />
+    </div>
   )
 }
 

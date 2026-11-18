@@ -13,7 +13,7 @@ export const pin = defineType({
       name: 'title',
       title: 'Title',
       type: 'string',
-      validation: (Rule) => Rule.required(),
+      description: 'Optional. Bulk-uploaded photos start without one.',
     }),
     defineField({
       name: 'kind',
@@ -81,7 +81,7 @@ export const pin = defineType({
     prepare({title, kind, media, drone, fileName}) {
       const isDrone = effectiveDrone(drone, fileName)
       return {
-        title: title || 'Pin',
+        title: title || fileName || 'Photo',
         subtitle: isDrone ? `${kind} · Drone` : kind,
         media,
       }

@@ -2,7 +2,7 @@
 
 import {useCallback, useDeferredValue, useEffect, useMemo, useRef, useState} from 'react'
 import dynamic from 'next/dynamic'
-import {MapLayers, type LayerFilters} from './MapLayers'
+import {ThreeDButton} from './ThreeDButton'
 import {MapSearch} from './MapSearch'
 import {PileStrip} from './PileStrip'
 import {lineMiles} from '@/lib/geo'
@@ -34,10 +34,7 @@ type Props = {
   loadFailed?: boolean
 }
 
-const emptyFilters: LayerFilters = {tracks: true, pins: true}
-
 export function MapApp({data: allData, initialSelected = null, loadFailed = false}: Props) {
-  const [filters, setFilters] = useState<LayerFilters>(emptyFilters)
   const [selected, setSelected] = useState<SelectedItem | null>(initialSelected)
   const [searchKey, setSearchKey] = useState(0)
   const [mapFilters, setMapFilters] = useState<MapFilterState>(emptyMapFilters)
@@ -108,16 +105,14 @@ export function MapApp({data: allData, initialSelected = null, loadFailed = fals
     setSearchKey((key) => key + 1)
   }, [])
 
-  const visibleCount =
-    (filters.tracks ? data.tracks.length : 0) + (filters.pins ? data.pins.length : 0)
   const total = allData.tracks.length + allData.pins.length
   const matching = data.tracks.length + data.pins.length
 
   const selectedStillVisible = useMemo(() => {
     if (!selected) return false
-    if (selected.kind === 'track') return filters.tracks && data.tracks.some((item) => item._id === selected.id)
-    return filters.pins && data.pins.some((item) => item._id === selected.id)
-  }, [selected, filters, data])
+    if (selected.kind === 'track') return data.tracks.some((item) => item._id === selected.id)
+    return data.pins.some((item) => item._id === selected.id)
+  }, [selected, data])
 
   const card = selectedStillVisible ? selected : null
 
@@ -133,7 +128,6 @@ export function MapApp({data: allData, initialSelected = null, loadFailed = fals
       ) : (
         <MapCanvas
           data={data}
-          filters={filters}
           threeD={threeD}
           onThreeDGesture={startThreeDFromGesture}
           selected={card}
@@ -157,7 +151,7 @@ export function MapApp({data: allData, initialSelected = null, loadFailed = fals
         />
       ) : null}
       {!mapFailed ? (
-        <MapLayers filters={filters} onChange={setFilters} threeD={threeD} onThreeDChange={changeThreeD} />
+        <ThreeDButton threeD={threeD} onChange={changeThreeD} />
       ) : null}
       {!mapFailed && loadFailed ? (
         <p
@@ -172,9 +166,9 @@ export function MapApp({data: allData, initialSelected = null, loadFailed = fals
           Nothing mapped yet.
         </p>
       ) : null}
-      {!mapFailed && total > 0 && visibleCount === 0 ? (
+      {!mapFailed && !loadFailed && total > 0 && matching === 0 ? (
         <p className="pointer-events-none absolute left-4 top-[68px] z-10 rounded-full bg-white/85 px-3 py-1.5 text-[13px] text-black/60 shadow-sm">
-          {matching === 0 ? 'Nothing matches your search.' : 'Nothing mapped yet.'}
+          Nothing matches your search.
         </p>
       ) : null}
       {hint ? (

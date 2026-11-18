@@ -54,9 +54,18 @@ export function filterOptions(data: MapData) {
   for (const pin of data.pins) types.set(pinType(pin), PIN_LABELS[pin.kind] ?? 'Places')
   for (const track of data.tracks) types.set(trackType(track), TRACK_LABELS[track.activity] ?? 'Routes')
   const order = [...Object.keys(PIN_LABELS).map((k) => `pin:${k}`), ...Object.keys(TRACK_LABELS).map((k) => `track:${k}`)]
-  const typeOptions: TypeOption[] = order
+  const kinds: TypeOption[] = order
     .filter((value) => types.has(value))
     .map((value) => ({value, label: types.get(value)!}))
+  // Photos / Routes: one tap for "all of that sort" (only worth offering when both exist).
+  const groups: TypeOption[] =
+    data.pins.length > 0 && data.tracks.length > 0
+      ? [
+          {value: 'pin:all', label: 'Photos'},
+          {value: 'track:all', label: 'Routes'},
+        ]
+      : []
+  const typeOptions: TypeOption[] = [...groups, ...kinds]
 
   const years = new Set<string>()
   for (const pin of data.pins) {
@@ -87,7 +96,11 @@ function matchesQuery(query: string, ...fields: (string | undefined)[]) {
 
 export function applyMapFilters(data: MapData, state: MapFilterState): MapData {
   if (!filtersActive(state)) return data
-  const typeOk = (type: string) => state.types.length === 0 || state.types.includes(type)
+  // 'pin:all' / 'track:all' are the Photos / Routes group chips: every kind of that sort.
+  const typeOk = (type: string) =>
+    state.types.length === 0 ||
+    state.types.includes(type) ||
+    state.types.includes(type.startsWith('pin:') ? 'pin:all' : 'track:all')
   return {
     ...data,
     pins: data.pins.filter(
@@ -116,6 +129,10 @@ export type ResultItem = {
   date: string | undefined
   photo: PinDoc['photo']
   miles: number | null
+  /** Routes: bike / hike / other, for the icon's colour. */
+  activity?: TrackDoc['activity']
+  /** Photos: the pin's kind, for the icon shown when there's no picture. */
+  pinKind?: PinDoc['kind']
 }
 
 /** Everything that passed the filters, as one list in the chosen order. */
@@ -129,6 +146,7 @@ export function resultList(shown: MapData, sort: SortMode, miles: (track: TrackD
       date: pin.at,
       photo: pin.photo,
       miles: null,
+      pinKind: pin.kind,
     })),
     ...shown.tracks.map<ResultItem>((track) => ({
       kind: 'track',
@@ -138,6 +156,7 @@ export function resultList(shown: MapData, sort: SortMode, miles: (track: TrackD
       date: track.startedAt,
       photo: track.photo,
       miles: miles(track),
+      activity: track.activity,
     })),
   ]
   const time = (item: ResultItem) => dateOf(item.date)

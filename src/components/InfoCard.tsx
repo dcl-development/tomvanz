@@ -1,7 +1,8 @@
 'use client'
 
-import {useEffect, useMemo, useState} from 'react'
+import {useEffect, useMemo, useRef, useState} from 'react'
 import {createPortal} from 'react-dom'
+import {CloseIcon} from './CloseIcon'
 import {ElevationChart} from './ElevationChart'
 import {PinShape} from './shapes'
 import {formatMiles, lineMiles} from '@/lib/geo'
@@ -117,13 +118,25 @@ function Lightbox({url, alt, onClose}: {url: string; alt: string; onClose: () =>
         type="button"
         aria-label="Close photo"
         onClick={onClose}
-        className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/15 text-[22px] leading-none text-white backdrop-blur-md transition hover:bg-white/25"
+        className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur-md transition hover:bg-white/25"
       >
-        ×
+        <CloseIcon className="h-[18px] w-[18px]" />
       </button>
     </div>,
     document.body,
   )
+}
+
+/**
+ * Colours the card's pointer (the little arrow down to its photo on the map) to match the
+ * bottom of the card: white when there's a details section, dark when the photo runs to the edge.
+ */
+function PointerColor({light}: {light: boolean}) {
+  const ref = useRef<HTMLSpanElement | null>(null)
+  useEffect(() => {
+    ref.current?.closest<HTMLElement>('.tv-popup')?.style.setProperty('--tip', light ? '#ffffff' : '#0c0c0c')
+  }, [light])
+  return <span ref={ref} hidden />
 }
 
 export function InfoCard({data, selected, onClose}: Props) {
@@ -167,6 +180,7 @@ export function InfoCard({data, selected, onClose}: Props) {
 
   return (
     <article className={frame}>
+      <PointerColor light={hasDetails} />
       <div className="relative aspect-[4/3] overflow-hidden bg-neutral-200">
         {card.imageUrl ? (
           <button
@@ -220,9 +234,9 @@ export function InfoCard({data, selected, onClose}: Props) {
           type="button"
           onClick={onClose}
           aria-label="Close"
-          className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/35 text-[20px] leading-none text-white backdrop-blur-md transition hover:bg-black/50 active:scale-95"
+          className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/35 text-white backdrop-blur-md transition hover:bg-black/50 active:scale-95"
         >
-          ×
+          <CloseIcon className="h-4 w-4" />
         </button>
 
         <div className="pointer-events-none absolute inset-x-0 bottom-0 p-4 text-white">
