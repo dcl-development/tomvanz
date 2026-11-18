@@ -294,7 +294,8 @@ export function MapCanvas({
     })
     map.on('load', () => {
       readyRef.current = true
-      syncMap(map, dataRef.current, pinCtx(), markersRef)
+      // The first draw fits everything in view; later redraws (search, filters) leave the camera alone.
+      syncMap(map, dataRef.current, pinCtx(), markersRef, true)
       if (selectedRef.current) {
         focusSelection(map, dataRef.current, selectedRef.current, 0)
       }
@@ -339,7 +340,7 @@ export function MapCanvas({
   useEffect(() => {
     const map = mapRef.current
     if (!map || !readyRef.current) return
-    syncMap(map, data, pinCtx(), markersRef)
+    syncMap(map, data, pinCtx(), markersRef, false)
   }, [data])
 
   useEffect(() => {
@@ -488,6 +489,8 @@ function syncMap(
   data: MapData,
   ctx: PinRenderCtx,
   markersRef: {current: Map<string, Marker>},
+  /** Move the camera to show everything. Only the very first draw does; redraws never move the view. */
+  fitToData: boolean,
 ) {
   clearTrackLayers(map)
 
@@ -554,10 +557,12 @@ function syncMap(
     hasPoint = true
   }
 
-  if (hasPoint) {
-    map.fitBounds(bounds, {padding: 72, maxZoom: 12, duration: 0})
-  } else {
-    map.jumpTo({center: [0, 20], zoom: 1.4})
+  if (fitToData) {
+    if (hasPoint) {
+      map.fitBounds(bounds, {padding: 72, maxZoom: 12, duration: 0})
+    } else {
+      map.jumpTo({center: [0, 20], zoom: 1.4})
+    }
   }
   renderPins(map, ctx, markersRef, true)
 }

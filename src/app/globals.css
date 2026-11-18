@@ -13,6 +13,21 @@ button {
   font-family: inherit;
 }
 
+/* Tailwind 4 no longer gives buttons a pointer cursor, so everything clickable gets one here.
+   In the base layer, so a utility like cursor-zoom-in on a specific button still wins. */
+@layer base {
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']),
+  summary,
+  select,
+  input[type='checkbox'],
+  input[type='radio'],
+  input[type='file'],
+  label[for] {
+    cursor: pointer;
+  }
+}
+
 .maplibregl-ctrl-attrib {
   font-size: 10px;
 }
