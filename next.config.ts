@@ -1,4 +1,4 @@
-// Repo: https://github.com/dcl-development/tomvanz
+// Repo: https://github.com/jakedcl/tomvanz
 
 import type {NextConfig} from 'next'
 
