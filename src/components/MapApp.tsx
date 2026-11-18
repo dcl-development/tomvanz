@@ -5,13 +5,12 @@ import dynamic from 'next/dynamic'
 import {ThreeDButton} from './ThreeDButton'
 import {MapSearch} from './MapSearch'
 import {PileStrip} from './PileStrip'
-import {lineMiles} from '@/lib/geo'
+import {trackMiles} from '@/lib/track-mileage'
 import {
   applyMapFilters,
   emptyMapFilters,
   filterOptions,
   resultList,
-  trackCoords,
   type MapFilterState,
   type ResultItem,
 } from '@/lib/map-filters'
@@ -43,7 +42,7 @@ export function MapApp({data: allData, initialSelected = null, loadFailed = fals
   const data = useMemo(() => applyMapFilters(allData, deferredFilters), [allData, deferredFilters])
   const options = useMemo(() => filterOptions(allData), [allData])
   const results = useMemo(
-    () => resultList(applyMapFilters(allData, mapFilters), (track) => lineMiles(trackCoords(track))),
+    () => resultList(applyMapFilters(allData, mapFilters), (track) => trackMiles(track)),
     [allData, mapFilters],
   )
   const [pileIds, setPileIds] = useState<string[] | null>(null)

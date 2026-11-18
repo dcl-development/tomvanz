@@ -5,7 +5,8 @@ import {createPortal} from 'react-dom'
 import {CloseIcon} from './CloseIcon'
 import {ElevationChart} from './ElevationChart'
 import {PhotoShape} from './shapes'
-import {formatMiles, lineMiles} from '@/lib/geo'
+import {formatMiles} from '@/lib/geo'
+import {trackMiles} from '@/lib/track-mileage'
 import {urlFor} from '@/lib/sanity/image'
 import {lineCoordinates, type MapData, type SelectedItem} from '@/lib/sanity/types'
 import {trackColor} from '@/lib/track-color'
@@ -48,7 +49,7 @@ function cardModel(data: MapData, selected: SelectedItem): CardModel | null {
     const track = data.tracks.find((item) => item._id === selected.id)
     if (!track) return null
     const when = formatDate(track.startedAt)
-    const miles = lineMiles(lineCoordinates(track.route))
+    const miles = trackMiles(track)
     const stats = [when, miles ? formatMiles(miles) : null].filter((item): item is string =>
       Boolean(item),
     )

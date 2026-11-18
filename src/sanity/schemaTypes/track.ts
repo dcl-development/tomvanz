@@ -43,6 +43,22 @@ export const track = defineType({
       validation: (Rule) => Rule.required(),
     }),
     defineField({
+      name: 'displayCoordinates',
+      title: 'Display coordinates',
+      type: 'text',
+      hidden: () => true,
+      readOnly: () => true,
+      description: 'Simplified line for the map (derived from GPX; do not edit).',
+    }),
+    defineField({
+      name: 'distanceMeters',
+      title: 'Distance (m)',
+      type: 'number',
+      hidden: () => true,
+      readOnly: () => true,
+      description: 'Path length from the full GPX line, in meters.',
+    }),
+    defineField({
       name: 'route',
       title: 'Route',
       type: 'object',
