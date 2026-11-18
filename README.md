@@ -1,6 +1,6 @@
 # tomvanz.com
 
-Repo: https://github.com/dcl-development/tomvanz
+Repo: https://github.com/jakedcl/tomvanz
 
 Personal site for Tom Vanz: a Next.js app at the repository root.
 

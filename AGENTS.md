@@ -21,7 +21,7 @@ From the repo root: `npm install && npm run dev`; `npm run build`; `npm run lint
 
 ## Content
 
-Sanity project `lee2r8sa`, dataset `production` (hardcoded in `sanity.config.ts` / `sanity.cli.ts`). `SANITY_API_READ_TOKEN` is optional. Drafts never show on the map.
+Sanity project `lee2r8sa`, dataset `production` (hardcoded in `sanity.config.tsx` / `sanity.cli.ts`). `SANITY_API_READ_TOKEN` is optional. Drafts never show on the map.
 
 ## Gotchas
 
