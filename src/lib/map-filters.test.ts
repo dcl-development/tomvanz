@@ -115,7 +115,7 @@ describe('filterOptions', () => {
 
 describe('resultList icons', () => {
   it('carries the activity for routes, and labels photos Photo or Drone', () => {
-    const items = resultList(data, 'az', () => null)
+    const items = resultList(data, () => null)
     expect(items.find((i) => i.kind === 'track')?.activity).toBe('hike')
     expect(items.find((i) => i.id === 'a')).toMatchObject({kind: 'pin', label: 'Photo'})
     expect(items.find((i) => i.id === 'b')).toMatchObject({kind: 'pin', label: 'Drone'})
@@ -123,10 +123,8 @@ describe('resultList icons', () => {
 })
 
 describe('resultList', () => {
-  it('sorts newest, oldest and A–Z, with undated items last by date', () => {
-    const titles = (sort: 'newest' | 'oldest' | 'az') => resultList(data, sort, () => null).map((r) => r.title)
-    expect(titles('newest')).toEqual(['Mount Marcy', 'Algonquin loop', 'Lake Colden', 'Undated spot'])
-    expect(titles('oldest')).toEqual(['Lake Colden', 'Algonquin loop', 'Mount Marcy', 'Undated spot'])
-    expect(titles('az')).toEqual(['Algonquin loop', 'Lake Colden', 'Mount Marcy', 'Undated spot'])
+  it('lists dated items newest first, with undated ones last', () => {
+    const titles = resultList(data, () => null).map((r) => r.title)
+    expect(titles).toEqual(['Mount Marcy', 'Algonquin loop', 'Lake Colden', 'Undated spot'])
   })
 })

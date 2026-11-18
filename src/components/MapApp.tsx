@@ -43,7 +43,7 @@ export function MapApp({data: allData, initialSelected = null, loadFailed = fals
   const data = useMemo(() => applyMapFilters(allData, deferredFilters), [allData, deferredFilters])
   const options = useMemo(() => filterOptions(allData), [allData])
   const results = useMemo(
-    () => resultList(applyMapFilters(allData, mapFilters), mapFilters.sort, (track) => lineMiles(trackCoords(track))),
+    () => resultList(applyMapFilters(allData, mapFilters), (track) => lineMiles(trackCoords(track))),
     [allData, mapFilters],
   )
   const [pileIds, setPileIds] = useState<string[] | null>(null)

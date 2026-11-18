@@ -1,7 +1,5 @@
 import {lineCoordinates, type MapData, type PinDoc, type TrackDoc} from '@/lib/sanity/types'
 
-export type SortMode = 'newest' | 'oldest' | 'az'
-
 export type MapFilterState = {
   query: string
   /** Empty means "everything". Values: `pin:all` (photos), `track:all` (routes), `track:hike`, … */
@@ -9,10 +7,9 @@ export type MapFilterState = {
   year: string | null
   /** Only photos shot with a drone. */
   drone: boolean
-  sort: SortMode
 }
 
-export const emptyMapFilters: MapFilterState = {query: '', types: [], year: null, drone: false, sort: 'newest'}
+export const emptyMapFilters: MapFilterState = {query: '', types: [], year: null, drone: false}
 
 export type TypeOption = {value: string; label: string}
 
@@ -126,8 +123,8 @@ export type ResultItem = {
   activity?: TrackDoc['activity']
 }
 
-/** Everything that passed the filters, as one list in the chosen order. */
-export function resultList(shown: MapData, sort: SortMode, miles: (track: TrackDoc) => number | null): ResultItem[] {
+/** Everything that passed the filters as one list: routes newest first, then undated photos A–Z. */
+export function resultList(shown: MapData, miles: (track: TrackDoc) => number | null): ResultItem[] {
   const items: ResultItem[] = [
     ...shown.pins.map<ResultItem>((pin) => ({
       kind: 'pin',
@@ -151,13 +148,12 @@ export function resultList(shown: MapData, sort: SortMode, miles: (track: TrackD
   ]
   const time = (item: ResultItem) => dateOf(item.date)
   return items.sort((a, b) => {
-    if (sort === 'az') return a.title.localeCompare(b.title)
     const ta = time(a)
     const tb = time(b)
     if (ta == null && tb == null) return a.title.localeCompare(b.title)
     if (ta == null) return 1
     if (tb == null) return -1
-    return sort === 'newest' ? tb - ta : ta - tb
+    return tb - ta
   })
 }
 
