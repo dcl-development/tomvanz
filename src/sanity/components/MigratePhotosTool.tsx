@@ -4,11 +4,13 @@ import {useRef, useState} from 'react'
 import {Badge, Box, Button, Card, Checkbox, Flex, Spinner, Stack, Text} from '@sanity/ui'
 import {useClient} from 'sanity'
 import {
+  convertDocuments,
   inBatches,
   planMigration,
-  replaceDocuments,
+  restoreDocuments,
   type MigrationPlan,
   type OldDoc,
+  type PhotoDoc,
   type TransactionLike,
 } from '../../lib/migrate-photos'
 
@@ -18,8 +20,10 @@ export type MigrationClient = {
   fetchAll: () => Promise<OldDoc[]>
   /** The current version of specific documents. */
   fetchByIds: (ids: string[]) => Promise<OldDoc[]>
-  /** Replace these documents (the type may change) in one all-or-nothing step. */
-  replaceAll: (docs: object[]) => Promise<void>
+  /** Create the new Photos, then delete the old pins they replace (two all-or-nothing steps). */
+  convert: (items: {from: OldDoc; to: PhotoDoc}[]) => Promise<void>
+  /** Put original documents back from a backup. */
+  restore: (docs: {_id: string; _type: string}[]) => Promise<void>
 }
 
 const BATCH_SIZE = 20
@@ -27,14 +31,12 @@ const BATCH_SIZE = 20
 /** The Studio tool: hands the screen the Studio's own Sanity connection. */
 export function MigratePhotosTool() {
   const sanity = useClient({apiVersion: '2026-01-01'}).withConfig({perspective: 'raw', useCdn: false})
+  const connection = {transaction: () => sanity.transaction() as unknown as TransactionLike}
   const client: MigrationClient = {
     fetchAll: () => sanity.fetch<OldDoc[]>(`*[_type in ["pin", "photo"]]`),
     fetchByIds: (ids) => sanity.fetch<OldDoc[]>(`*[_id in $ids]`, {ids}),
-    replaceAll: (docs) =>
-      replaceDocuments(
-        {transaction: () => sanity.transaction() as unknown as TransactionLike},
-        docs as {_id: string; _type: string}[],
-      ),
+    convert: (items) => convertDocuments(connection, items),
+    restore: (docs) => restoreDocuments(connection, docs),
   }
   return <MigratePhotosView client={client} />
 }
@@ -107,11 +109,18 @@ export function MigratePhotosView({client}: {client: MigrationClient}) {
       for (const batch of batches) {
         // Read the batch fresh right before writing, so an edit made since the scan isn't lost.
         const fresh = planMigration(await client.fetchByIds(batch))
-        if (fresh.convert.length > 0) await client.replaceAll(fresh.convert.map((c) => c.to))
-        // Check it really took before moving on.
-        const after = await client.fetchByIds(batch)
-        const stillOld = after.filter((d) => d._type !== 'photo' || 'fish' in d || 'caption' in d)
-        if (stillOld.length > 0) throw new Error(`${stillOld.length} document(s) did not convert as expected`)
+        if (fresh.convert.length > 0) await client.convert(fresh.convert)
+        // Check it really took before moving on: each new Photo exists in the new shape, and each
+        // old pin it replaced is gone.
+        const wanted = fresh.convert.flatMap((c) => [c.to._id, c.from._id])
+        const present = new Map((await client.fetchByIds([...new Set(wanted)])).map((d) => [d._id, d]))
+        const problems = fresh.convert.filter((c) => {
+          const made = present.get(c.to._id)
+          const madeOk = made?._type === 'photo' && !('fish' in made) && !('caption' in made)
+          const oldGone = c.from._id === c.to._id || !present.has(c.from._id)
+          return !(madeOk && oldGone)
+        })
+        if (problems.length > 0) throw new Error(`${problems.length} document(s) did not convert as expected`)
         done += batch.length
         setProgress({done, total: ids.length})
       }
@@ -126,7 +135,7 @@ export function MigratePhotosView({client}: {client: MigrationClient}) {
     } catch (error) {
       setMessage({
         tone: 'critical',
-        text: `Stopped partway: ${error instanceof Error ? error.message : 'something failed'}. Whole batches either complete or don't happen, so nothing is half-converted. Scan again to see what's left.`,
+        text: `Stopped: ${error instanceof Error ? error.message : 'something failed'}. Each step either completes or doesn't happen, and a new Photo is always created before its old pin is removed, so nothing is lost. Scan again to see what's left; running again picks up where it stopped.`,
       })
       await scan(false)
     } finally {
@@ -143,7 +152,7 @@ export function MigratePhotosView({client}: {client: MigrationClient}) {
       if (!valid || !docs) throw new Error('That doesn’t look like a backup from this tool.')
       if (!window.confirm(`Put ${docs.length} documents back exactly as they were in this backup? Anything edited since will be overwritten.`)) return
       setPhase('restoring')
-      for (const batch of inBatches(docs, BATCH_SIZE)) await client.replaceAll(batch.map(stripSystemFields))
+      for (const batch of inBatches(docs, BATCH_SIZE)) await client.restore(batch.map(stripSystemFields) as {_id: string; _type: string}[])
       await scan(false)
       setMessage({tone: 'positive', text: `Restored ${docs.length} documents from the backup.`})
     } catch (error) {
@@ -166,7 +175,7 @@ export function MigratePhotosView({client}: {client: MigrationClient}) {
           </Text>
           <Text size={1} muted>
             Moves the old pins and trip photos into the single Photo type. Each keeps its photo, location, title, note and date,
-            and keeps the same id, so shared links keep working. Run it once. It can be undone from the backup file.
+            and old shared links keep working. Run it once. It can be undone from the backup file.
           </Text>
         </Stack>
 

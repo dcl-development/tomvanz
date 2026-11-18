@@ -66,6 +66,8 @@ function toLngLat(point: unknown): [number, number] | null {
 
 export type PinDoc = {
   _id: string
+  /** The id this photo had before the content was converted; old shared links use it. */
+  legacyId?: string
   title: string
   note?: string
   at?: string

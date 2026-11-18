@@ -30,6 +30,7 @@ export const mapQuery = defineQuery(`{
     +
     *[_type == "photo" && defined(location.lat) && defined(location.lng) && defined(image.asset)] {
       _id,
+      legacyId,
       "title": coalesce(title, fish, ""),
       "note": coalesce(note, caption),
       "at": takenAt,

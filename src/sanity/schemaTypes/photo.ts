@@ -63,6 +63,8 @@ export const photo = defineType({
         'Spotted automatically from DJI file names. Switch it on for one that has no drone file name (a screenshot, say), or off if it was spotted by mistake.',
       components: {input: DroneInput},
     }),
+    // Set by the conversion: the id of the old pin this came from (so old shared links still work).
+    defineField({name: 'legacyId', title: 'Old id', type: 'string', hidden: true, readOnly: true}),
     // Old "trip photo" fields. Hidden; the "Convert to Photos" tool moves them to title / note.
     defineField({name: 'fish', title: 'Title (old)', type: 'string', hidden: true}),
     defineField({name: 'caption', title: 'Caption (old)', type: 'string', hidden: true}),

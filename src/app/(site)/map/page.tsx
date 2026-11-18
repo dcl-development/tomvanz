@@ -2,31 +2,10 @@ import type {Metadata} from 'next'
 import {loadMapData} from '@/lib/sanity/load'
 import {urlFor} from '@/lib/sanity/image'
 import {MapApp} from '@/components/MapApp'
-import type {MapData, SelectedItem} from '@/lib/sanity/types'
+import {first, sharedItem} from '@/lib/shared-item'
 
 type Props = {
   searchParams: Promise<{[key: string]: string | string[] | undefined}>
-}
-
-function first(value: string | string[] | undefined) {
-  return Array.isArray(value) ? value[0] : value
-}
-
-/** The photo or track named in a shared link, if it still exists. */
-function sharedItem(data: MapData, params: {[key: string]: string | string[] | undefined}) {
-  const photoId = first(params.photo)
-  if (photoId) {
-    const pin = data.pins.find((item) => item._id === photoId)
-    if (pin) return {selected: {kind: 'pin', id: pin._id} as SelectedItem, title: pin.title, photo: pin.photo}
-  }
-  const trackId = first(params.track)
-  if (trackId) {
-    const track = data.tracks.find((item) => item._id === trackId)
-    if (track) {
-      return {selected: {kind: 'track', id: track._id, fly: true} as SelectedItem, title: track.title, photo: track.photo}
-    }
-  }
-  return null
 }
 
 export async function generateMetadata({searchParams}: Props): Promise<Metadata> {
