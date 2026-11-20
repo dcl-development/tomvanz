@@ -475,6 +475,21 @@ function clearTrackLayers(map: MapLibreMap) {
   }
 }
 
+/**
+ * The area the map may be panned to: everything on the map plus a generous margin, so you can still
+ * look a little past the edge but can't drift off into empty ocean or desert.
+ */
+function limitBounds(bounds: LngLatBounds): [[number, number], [number, number]] {
+  const sw = bounds.getSouthWest()
+  const ne = bounds.getNorthEast()
+  const latMargin = Math.max((ne.lat - sw.lat) * 0.6, 4)
+  const lngMargin = Math.max((ne.lng - sw.lng) * 0.6, 6)
+  return [
+    [Math.max(-180, sw.lng - lngMargin), Math.max(-85, sw.lat - latMargin)],
+    [Math.min(180, ne.lng + lngMargin), Math.min(85, ne.lat + latMargin)],
+  ]
+}
+
 function syncMap(
   map: MapLibreMap,
   data: MapData,
@@ -550,8 +565,10 @@ function syncMap(
 
   if (fitToData) {
     if (hasPoint) {
+      map.setMaxBounds(limitBounds(bounds))
       map.fitBounds(bounds, {padding: 72, maxZoom: 12, duration: 0})
     } else {
+      map.setMaxBounds(null)
       map.jumpTo({center: [0, 20], zoom: 1.4})
     }
   }
