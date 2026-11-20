@@ -74,8 +74,10 @@ button.maplibregl-marker[data-active='true'] .tv-pin {
   transition: opacity 180ms ease;
 }
 
+/* Above every thumbnail (each pin's z-index is its position in the list, so it can run into the
+   hundreds) so nearby photos can't show through the open card. Below the lifted photo (100000). */
 .tv-popup.maplibregl-popup {
-  z-index: 20;
+  z-index: 50000;
 }
 
 .tv-popup .maplibregl-popup-content {
